@@ -1,0 +1,50 @@
+{
+  "id": "covering-index",
+  "titleZh": "覆盖索引：不回表",
+  "title": "Covering index",
+  "chapter": "index",
+  "difficulty": 3,
+  "minutes": 12,
+  "summary": "覆盖索引就是目录本身就写着你想要的信息：查「作者是谁」，目录里已经印了作者名，不用再跑去书架抽那本书。MySQL 里如果一个索引包含了查询需要的所有列，它直接从索引返回结果，不再回表，EXPLAIN 的 Extra 会显示 Using index，这是查询优化里最省事的一招。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "覆盖索引不是一种新的索引类型，而是一种「查询和索引刚好匹配」的状态：SELECT 要的列全在索引里，WHERE 用的也是这个索引，MySQL 就不用回表。因为二级索引里天然带着主键值，所以只查主键和索引列时，往往不需要额外建索引。"
+    },
+    {
+      "heading": "怎么判断有没有覆盖",
+      "text": "看 EXPLAIN 的 Extra 列：出现 Using index 表示用到了覆盖索引，没有回表；出现 Using index condition 表示只把条件下推到索引层，仍可能回表；出现 Using where 多半是回表后再过滤。注意 SELECT * 几乎永远不可能覆盖，因为索引不可能包含所有列。"
+    },
+    {
+      "heading": "用覆盖索引提升列表页",
+      "text": "列表页经常是「按某条件筛，展示 id、标题、时间」。建 (user_id, created_at) 这样的索引后，查 id + created_at 就完全走索引，速度快一个量级。如果还要展示商品名，要么把商品名冗余进索引（联合索引列），要么接受回表——权衡空间和速度。"
+    }
+  ],
+  "keyPoints": [
+    "覆盖索引 = 索引包含查询需要的全部列，无需回表。",
+    "EXPLAIN 的 Extra 出现 Using index 就是覆盖索引生效。",
+    "二级索引自带主键，所以只查主键 + 索引列通常天然覆盖。",
+    "SELECT * 基本无法覆盖，写查询要显式列出需要的列。",
+    "用联合索引扩展覆盖范围，代价是索引空间变大、写入更慢。"
+  ],
+  "snippets": [
+    {
+      "title": "覆盖索引与回表对比",
+      "lang": "sql",
+      "code": "ALTER TABLE users ADD INDEX idx_city_name (city, name);\n\n-- 覆盖：只取索引里的列\nEXPLAIN SELECT city, name FROM users WHERE city = '杭州';\n\n-- 回表：phone 不在索引里\nEXPLAIN SELECT city, name, phone FROM users WHERE city = '杭州';"
+    },
+    {
+      "title": "列表页用覆盖索引",
+      "lang": "sql",
+      "code": "ALTER TABLE orders ADD INDEX idx_user_created_amount (user_id, created_at, total_amount);\n\nEXPLAIN SELECT id, created_at, total_amount\nFROM orders\nWHERE user_id = 1001\nORDER BY created_at DESC\nLIMIT 20;"
+    }
+  ],
+  "pitfalls": [
+    "在索引最后悄悄加了很多列「顺便覆盖」：索引变大、写入变慢，最后算下来不一定划算。",
+    "覆盖索引查询里出现函数或表达式列：表达式结果不在索引里，照样回表。",
+    "以为 Using index 一定代表不读表：它只代表不回表，索引本身也要读。",
+    "加了 ORDER BY 但索引顺序不匹配：虽然覆盖了列，仍然会额外排序。"
+  ],
+  "enterprise": "高频列表页和报表导出是最值得做覆盖索引的场景：把筛选列、排序列、展示的小字段放进联合索引，减少回表和磁盘 IO。企业里通常会记录「哪些慢查询靠覆盖索引解决」，并在索引评审时评估索引宽度，避免把大字段（VARCHAR(255) 以上）塞进索引。",
+  "related": ["secondary-index", "composite-index", "explain", "index-design", "deep-pagination"]
+}

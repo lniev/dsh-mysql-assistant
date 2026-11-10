@@ -1,0 +1,69 @@
+{
+  "id": "data-archiving",
+  "titleZh": "冷热数据归档",
+  "title": "Data archiving",
+  "chapter": "enterprise",
+  "difficulty": 3,
+  "minutes": 12,
+  "summary": "冷热数据归档就是给数据库做断舍离：用户真正经常查的只有最近几个月的数据，三年前的订单躺在表里，却照样占着索引、拖慢备份、让 ALTER 变慢。归档的做法是把老数据搬到历史表或历史库，主表只留热数据，查询和运维都会轻松很多。",
+  "sections": [
+    {
+      "heading": "先看表大了有什么问题",
+      "text": "订单表 3 亿行时，索引比数据先撑不住：查询要多走好几层 B+ 树、Buffer Pool 装不下全部热点页、备份要跑几个小时、加个字段锁表半小时。很多被当成「慢查询」的问题，其实是「表太大」，加索引只能缓解，不能根治。"
+    },
+    {
+      "heading": "先定保留期",
+      "text": "按业务和合规决定：订单至少保留几年、日志保留 6 个月、操作记录保留 1 年。保留期写进制度，再定义什么算冷数据，比如「已关闭且超过 12 个月」的订单。没有制度，归档就会变成「凭感觉删数据」，很危险。"
+    },
+    {
+      "heading": "怎么迁才安全",
+      "text": "建同结构的归档表，按主键或时间分批 INSERT ... SELECT 过去，确认行数和金额一致后再分批 DELETE 主表；每批控制在几千行、加 sleep 限流，避开高峰。pt-archiver 这类工具可以自动分批、限速、校验，比自己写脚本稳。"
+    },
+    {
+      "heading": "为什么不直接 DELETE",
+      "text": "一条 DELETE 删几千万行会产生巨大事务、锁住大量行、写爆 undo 和 binlog，从库延迟能到几小时。分批删除每批提交，才能把影响压到最小，中途出错也只需要重跑那一批，不会回滚几十分钟。"
+    },
+    {
+      "heading": "归档后的查询和备份",
+      "text": "用户查历史数据走归档表的只读接口，或者按时间路由到主表/归档表；备份策略分开：主表每天全量，归档表低频备份；冷数据还可以继续导到对象存储或数仓，数据库里只留近几年的数据。"
+    }
+  ],
+  "keyPoints": [
+    "表太大先想归档，不是所有慢查询都要加索引。",
+    "归档顺序：先搬数据、核对行数、再删主表，绝不能先删。",
+    "迁移和删除都要分批加限流，别用一条大 DELETE。",
+    "归档表结构和索引保持一致，查询接口按时间路由到主表或归档表。",
+    "保留期由业务和合规决定，写进制度再执行。",
+    "归档后主表的备份、DDL、索引维护都会明显变快。"
+  ],
+  "snippets": [
+    {
+      "title": "建一张同结构的归档表",
+      "lang": "sql",
+      "code": "CREATE TABLE orders_archive LIKE orders;"
+    },
+    {
+      "title": "分批搬历史订单",
+      "lang": "sql",
+      "code": "INSERT INTO orders_archive\nSELECT * FROM orders\nWHERE status = 4\n  AND created_at < '2025-01-01'\nORDER BY id\nLIMIT 5000;"
+    },
+    {
+      "title": "核对后再分批删除主表数据",
+      "lang": "sql",
+      "code": "SELECT COUNT(*) AS archive_count FROM orders_archive;\nDELETE FROM orders\nWHERE status = 4\n  AND created_at < '2025-01-01'\nORDER BY id\nLIMIT 1000;"
+    }
+  ],
+  "pitfalls": [
+    "直接一条 DELETE 删掉几千万行：大事务、锁大量行、从库延迟爆炸，必须分批。",
+    "先删后归档：中间出错数据就没了，顺序一定是先归档、核对、再删。",
+    "归档表和主表结构或索引不一致：迁过去的查询照样慢，建表用 LIKE 或同一定义。",
+    "归档完不管查询入口：用户查历史订单查不到，要做时间路由或历史查询接口。"
+  ],
+  "enterprise": "归档做成定时任务，每次跑批记录迁移和删除行数并告警；按业务定保留期（财务、订单类常见 5~10 年），冷数据放对象存储或数仓；归档前后跑一次行数和金额对账；大表用 pt-archiver 并限制每秒行数，避开下单高峰。",
+  "related": [
+    "ecommerce-schema",
+    "backup-restore",
+    "online-ddl",
+    "slow-query-log"
+  ]
+}

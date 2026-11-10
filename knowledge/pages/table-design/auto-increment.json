@@ -1,0 +1,50 @@
+{
+  "id": "auto-increment",
+  "titleZh": "自增主键与 AUTO_INCREMENT",
+  "title": "AUTO_INCREMENT",
+  "chapter": "table-design",
+  "difficulty": 2,
+  "minutes": 10,
+  "summary": "AUTO_INCREMENT 让数据库自动给新行发号：第一行 1，第二行 2，不用应用自己算 id。它像银行叫号机，来一个人取一个号，天然递增；正因为递增，插入的数据总是排在索引末尾，写入又快又不容易产生碎片。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "给整数主键加上 AUTO_INCREMENT，INSERT 时不用写 id，MySQL 会从计数器取一个比当前最大值大的数填进去。这个计数器存在内存里，可以用 ALTER TABLE ... AUTO_INCREMENT = N 调整起点，也可以查 SHOW TABLE STATUS 看下一个值。"
+    },
+    {
+      "heading": "自增值为什么不会回退",
+      "text": "自增值一旦分配出去就不会再用。哪怕插入失败、事务回滚、把最后一行删掉，下一个号还是继续往上加。这是为了保证并发下多个事务不会拿到同一个 id，代价是 id 会出现「空洞」。所以千万别把 id 连续当成业务规则。"
+    },
+    {
+      "heading": "多实例下会撞号",
+      "text": "自增只在单个 MySQL 实例内唯一。主从切换、分库分表、多主写入时，两台机器各自从 1 开始加，就会撞在一起。常见解法是设置不同的自增步长和起始偏移（auto_increment_increment / auto_increment_offset），或者改用雪花算法这类全局 id 生成器。"
+    }
+  ],
+  "keyPoints": [
+    "AUTO_INCREMENT 只用于整数主键或唯一索引列，每次取更大的值。",
+    "自增值分配后不回退，删除、回滚都只留下空洞，id 不保证连续。",
+    "INSERT 显式写 id 会覆盖自增值，也会把计数器推到更大。",
+    "多实例/分库分表下自增会冲突，需要全局 id 方案。",
+    "用 LAST_INSERT_ID() 拿刚插入行的自增值，别靠 id 最大值猜。"
+  ],
+  "snippets": [
+    {
+      "title": "自增主键并取回新 id",
+      "lang": "sql",
+      "code": "CREATE TABLE orders (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  user_id BIGINT UNSIGNED NOT NULL,\n  total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nINSERT INTO orders (user_id, total_amount) VALUES (1001, 199.00);\nSELECT LAST_INSERT_ID() AS new_order_id;"
+    },
+    {
+      "title": "调整自增起点、查看当前值",
+      "lang": "sql",
+      "code": "ALTER TABLE orders AUTO_INCREMENT = 100000;\nSHOW TABLE STATUS LIKE 'orders';"
+    }
+  ],
+  "pitfalls": [
+    "把 id 连续性当业务保证：回滚和删除都会产生空洞，对账时按 id 连续去推数量一定错。",
+    "以为删掉最大 id 行后下一行会复用该 id：不会，自增计数器不会回退。",
+    "分库分表后各库都用默认自增：写入时会产生相同 id，必须用全局发号器。",
+    "手动 INSERT 极大 id（比如 10 亿）后再插入普通行：自增会从 10 亿之后继续，白白浪费号段。"
+  ],
+  "enterprise": "单体库直接用 AUTO_INCREMENT 最省事；一旦要分库分表或多主写入，就切到雪花算法、号段模式（如美团 Leaf）这类全局 id 服务，并保证 id 趋势递增，避免随机 id 造成 InnoDB 插入热点和页分裂。",
+  "related": ["primary-key", "clustered-index", "create-table", "sharding"]
+}

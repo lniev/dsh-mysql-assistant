@@ -1,0 +1,58 @@
+{
+  "id": "sharding-middleware",
+  "titleZh": "分库分表中间件与路由",
+  "title": "Sharding middleware",
+  "chapter": "architecture",
+  "difficulty": 4,
+  "minutes": 12,
+  "summary": "分库分表中间件是「帮你把一条 SQL 变成 N 条」的那层：你写 SELECT * FROM orders WHERE user_id = 1002，它算出应该去 orders_2，把语句改写后发过去，再把结果合并给你。常见有客户端模式（嵌在应用里）和代理模式（应用当成一个 MySQL 连）。它解决路由和归并，但解决不了跨库事务。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "像快递分拣中心：你只写收件人（路由键），分拣中心决定包裹走哪个仓、走哪条线路，最后把多个仓的结果汇总给你。你不用关心 16 个分片怎么摆，只写逻辑 SQL；中间件就是数据库层的分拣中心，把复杂性挡在业务代码之外。"
+    },
+    {
+      "heading": "两种形态：客户端与代理",
+      "text": "客户端模式嵌在应用进程里（如 ShardingSphere-JDBC），没有额外网络跳转、性能好，但每种语言都要适配，升级要跟着应用发版。代理模式独立部署（如 ShardingSphere-Proxy、MyCat、Vitess），应用把它当普通 MySQL 连，支持多语言、升级不动应用，代价是多一跳网络和一套要运维的组件。"
+    },
+    {
+      "heading": "它替你做的四件事",
+      "text": "解析 SQL，找到分片键；按分片规则路由到目标库和表；改写 SQL（表名加后缀、分页和聚合改写成可合并的形式）；归并结果（排序、聚合、分页、去重）。分布式主键、读写分离路由、影子库压测通常也由它一起管，所以选型时要看这些能力是否齐全。"
+    },
+    {
+      "heading": "它不负责的事",
+      "text": "跨库 JOIN、跨库事务、跨库唯一约束、跨分片的深分页和复杂聚合。这些要么业务层用冗余字段、宽表、消息表绕开，要么接受最终一致。中间件只负责把 SQL 发对地方、把结果合回来，不会帮你把分布式事务变简单，这一点在选型时最容易被忽略。"
+    },
+    {
+      "heading": "选型与落地的注意点",
+      "text": "先看技术栈：Java 加 Spring 生态用 ShardingSphere-JDBC 最多；混合语言或想让应用无感，选 Proxy。分片规则要集中配置、能灰度发布，不要硬编码在业务代码里。切换中间件版本或改规则时，先双跑对比路由结果，再全量。"
+    }
+  ],
+  "keyPoints": [
+    "中间件做四件事：SQL 解析、路由、改写、归并。",
+    "客户端模式性能好但升级发版，代理模式应用无感但多一跳。",
+    "中间件不解决跨库事务和跨库 JOIN，这是设计时要避开的地方。",
+    "分布式主键（雪花 ID 或号段）通常由中间件或独立服务提供。",
+    "分片规则要集中配置并可灰度，不要散落在业务代码里。"
+  ],
+  "snippets": [
+    {
+      "title": "逻辑 SQL 到物理 SQL 的改写",
+      "lang": "sql",
+      "code": "-- 应用写逻辑表，中间件解析并改写\nSELECT id, user_id, total_amount\nFROM orders\nWHERE user_id = 1002\nORDER BY created_at DESC\nLIMIT 20;\n\n-- 实际发到 orders_2 分片的物理 SQL（表名被改写）\nSELECT id, user_id, total_amount\nFROM orders_2\nWHERE user_id = 1002\nORDER BY created_at DESC\nLIMIT 20;"
+    },
+    {
+      "title": "跨分片聚合需要中间件归并",
+      "lang": "sql",
+      "code": "-- 逻辑 SQL：中间件把聚合拆到各分片再求和\nSELECT COUNT(*) AS order_count, SUM(total_amount) AS gmv\nFROM orders\nWHERE created_at >= '2026-05-01';\n\n-- 物理上每个分片各执行一次（示例：orders_1）\nSELECT COUNT(*) AS order_count, SUM(total_amount) AS gmv\nFROM orders_1\nWHERE created_at >= '2026-05-01';"
+    }
+  ],
+  "pitfalls": [
+    "以为用了中间件就能跨库 JOIN 和分布式事务，结果性能和一致性都崩掉。",
+    "分片键不在 WHERE 里的查询（比如按手机号查订单）会被广播到所有分片。",
+    "中间件升级或分片规则变更没有灰度，路由算错导致读写落在不同分片。",
+    "依赖中间件做深分页，每个分片都要取大量数据，内存和网络被打爆。"
+  ],
+  "enterprise": "选中间件先看团队技术栈：Java 加 Spring 生态通常用 ShardingSphere-JDBC，混合语言或想应用无感用 Proxy。上线前把路由规则、全局 ID、跨片查询治理做成规范，禁止无分片键查询，并提供跨片查询监控，否则分片后的问题会比单库时更隐蔽。",
+  "related": ["sharding", "capacity-planning", "migration", "replication", "read-write-split"]
+}

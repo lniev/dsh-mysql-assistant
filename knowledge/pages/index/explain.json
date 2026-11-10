@@ -1,0 +1,61 @@
+{
+  "id": "explain",
+  "titleZh": "EXPLAIN：读懂执行计划",
+  "title": "EXPLAIN",
+  "chapter": "index",
+  "difficulty": 3,
+  "minutes": 18,
+  "summary": "EXPLAIN 就是给 SQL 拍的 X 光片：语句还没真正执行，优化器就先把「打算怎么查」摊开给你看——走哪个索引、扫多少行、要不要排序。它像体检报告，type、key、rows、Extra 这几项告诉你这条查询健不健康，是定位慢查询最直接的工具。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "在 SELECT 前面加 EXPLAIN，MySQL 会返回执行计划而不是结果集。它告诉你优化器选了哪条访问路径、预估要读多少行、有没有用索引、要不要临时表或排序。看报告的顺序建议是：先看 type 和 key 判断有没有走索引，再看 rows 判断扫描量，最后看 Extra 找隐藏成本。"
+    },
+    {
+      "heading": "先看一份真实输出",
+      "text": "下面这条查询按手机号查用户，phone 上有唯一索引。EXPLAIN 输出里 type 是 const、key 是 uk_phone、rows 是 1、key_len 是 82、Extra 是 NULL，整体是「唯一索引等值命中一行」的最优计划，可以直接放行。完整输出见下方代码块。"
+    },
+    {
+      "heading": "type：访问方式，从好到差",
+      "text": "常见值按性能排序：system > const > eq_ref > ref > range > index > ALL。const 是唯一索引等值命中一行；eq_ref 是 JOIN 时用主键关联；ref 是普通索引等值；range 是索引范围扫描；index 是扫整个索引树；ALL 是全表扫描。看到 ALL 或 rows 很大，就要考虑加索引或改 SQL。"
+    },
+    {
+      "heading": "key、rows、Extra 三列怎么读",
+      "text": "key 是实际用到的索引，为 NULL 说明没走索引；key_len 是索引用了多长，能反推联合索引用到了第几列；rows 是优化器预估要扫描的行数，不是精确值；filtered 是扫描后剩余比例。Extra 里 Using index 是覆盖索引，Using filesort 是额外排序，Using temporary 是用了临时表，Using index condition 是条件下推到索引层。"
+    },
+    {
+      "heading": "看到问题怎么改",
+      "text": "type=ALL 且 rows 接近表行数：补索引或改写条件。key 有值但 rows 仍很大：索引选择性不够，考虑联合索引。出现 Using filesort 且数据量大：让 ORDER BY 的列顺序和索引一致。出现 Using temporary：GROUP BY / DISTINCT 的列缺合适索引。8.0.18 起还能用 EXPLAIN ANALYZE 看真实执行耗时。"
+    }
+  ],
+  "keyPoints": [
+    "EXPLAIN 只显示计划不执行语句，看的是优化器的选择。",
+    "type 优先级：const > eq_ref > ref > range > index > ALL，ALL 要警惕。",
+    "key 为 NULL 表示没走索引；key_len 能看出联合索引用到第几列。",
+    "rows 是预估值，看数量级而不是精确值。",
+    "Extra 里的 Using filesort / Using temporary 是隐藏成本，值得优化。"
+  ],
+  "snippets": [
+    {
+      "title": "真实 EXPLAIN 输出：唯一索引等值查询",
+      "lang": "sql",
+      "code": "EXPLAIN SELECT id, phone, name FROM users WHERE phone = '13800000001';\n/*\n+----+-------------+-------+------------+-------+---------------+----------+---------+-------+------+----------+-------+\n| id | select_type | table | partitions | type  | possible_keys | key      | key_len | ref   | rows | filtered | Extra |\n+----+-------------+-------+------------+-------+---------------+----------+---------+-------+------+----------+-------+\n|  1 | SIMPLE      | users | NULL       | const | uk_phone      | uk_phone | 82      | const |    1 |   100.00 | NULL  |\n+----+-------------+-------+------------+-------+---------------+----------+---------+-------+------+----------+-------+\n*/\n-- type=const：唯一索引等值命中 1 行\n-- key=uk_phone：实际用了唯一索引\n-- key_len=82：VARCHAR(20) utf8mb4 NOT NULL，20*4+2\n-- rows=1 / filtered=100.00：预估只扫 1 行，命中率 100%\n-- Extra=NULL：不需要回表之外的额外动作，也没有排序"  },
+    {
+      "title": "反例：全表扫描 + 额外排序",
+      "lang": "sql",
+      "code": "EXPLAIN SELECT id, total_amount, created_at\nFROM orders\nWHERE status = 'paid'\nORDER BY created_at DESC\nLIMIT 10;\n/*\n+----+-------------+--------+------------+------+---------------+------+---------+------+---------+----------+-----------------------------+\n| id | select_type | table  | partitions | type | possible_keys | key  | key_len | ref  | rows    | filtered | Extra                       |\n+----+-------------+--------+------------+------+---------------+------+---------+------+---------+----------+-----------------------------+\n|  1 | SIMPLE      | orders | NULL       | ALL  | NULL          | NULL | NULL    | NULL | 1980000 |    10.00 | Using where; Using filesort |\n+----+-------------+--------+------------+------+---------------+------+---------+------+---------+----------+-----------------------------+\n*/\n-- type=ALL：全表扫描；key=NULL：没用索引\n-- rows≈198 万：预估要扫近 200 万行\n-- Using filesort：还要对结果额外排序"  },
+    {
+      "title": "EXPLAIN ANALYZE 看真实耗时（8.0.18+）",
+      "lang": "sql",
+      "code": "EXPLAIN ANALYZE\nSELECT id, total_amount, created_at\nFROM orders\nWHERE user_id = 1001\nORDER BY created_at DESC\nLIMIT 10;"
+    }
+  ],
+  "pitfalls": [
+    "只看 type 不看 rows：type=range 但扫 100 万行照样慢，rows 的数量级同样重要。",
+    "把 rows 当精确值：它是采样估算，可能偏差很大，判断要看数量级和对比。",
+    "EXPLAIN 的 Extra 为空就以为没问题：没有 Using filesort 也可能有大量回表，要结合 key 和查询列判断。",
+    "在线上直接 EXPLAIN ANALYZE 复杂查询：它会真实执行，可能带来额外的资源消耗。"
+  ],
+  "enterprise": "企业里诊断慢查询的标准动作是「看日志拿到 SQL → EXPLAIN 看计划 → 判断加索引或改 SQL → 在影子库对比前后 rows 和耗时 → 低峰上线」。规范一点的团队会把 EXPLAIN 结果和 SQL 一起贴进变更单，防止「加了索引但写错条件，白加」的情况。",
+  "related": ["slow-query-log", "index-failure", "composite-index", "covering-index", "optimizer-stats"]
+}

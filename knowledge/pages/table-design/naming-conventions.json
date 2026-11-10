@@ -1,0 +1,54 @@
+{
+  "id": "naming-conventions",
+  "titleZh": "表与字段命名规范",
+  "title": "Naming conventions",
+  "chapter": "table-design",
+  "difficulty": 1,
+  "minutes": 8,
+  "summary": "命名规范就像给家里的东西贴标签：位置一致、叫法统一，全家人才找得到。表名用 order_items 还是 OrderItems、时间列叫 create_time 还是 created_at，一旦混用，写 SQL 的人每次都要猜。规范不改变性能，但它决定了团队协作时有多少低级沟通成本。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "好的命名同时回答三个问题：这是什么东西（users、orders）、它属于谁（user_id、order_id）、它记录什么（created_at、paid_at）。统一用小写字母加下划线（snake_case），因为 Linux 上表名区分大小写，camelCase 在跨系统迁移时很容易翻车。"
+    },
+    {
+      "heading": "表名：单数还是复数",
+      "text": "两种流派都有人用，关键是全库一致。常见约定是表名用复数（users、orders、order_items），因为一行是 user、整张表是 users；关联表用「主表_子表」的形式（order_items、product_tags）。别出现 user、Users、t_user、tbl_user 四种写法并存。"
+    },
+    {
+      "heading": "字段名：统一后缀",
+      "text": "主键统一叫 id；外键叫「关联表单数_id」，如 user_id、order_id；时间统一 created_at / updated_at / deleted_at；布尔用 is_ 或 on_ 开头，如 is_deleted、on_sale；金额带 _amount 或 _price。状态字段叫 status，别一会儿 state、一会儿 order_status。"
+    },
+    {
+      "heading": "避开关键字和拼音",
+      "text": "order、desc、key、status 里有些是关键字，用 order 当表名必须写反引号，能避就避（用 orders）。字段名也别用拼音缩写（yhm、shrq），接手的人要先猜半天。英文单词拼错也没法自动纠正，建表前最好过一遍评审。"
+    }
+  ],
+  "keyPoints": [
+    "统一 snake_case，全小写，避免大小写敏感问题。",
+    "表名用复数（users/orders），关联表用主表_子表。",
+    "主键叫 id，外键叫 关联表单数_id，时间统一 created_at/updated_at。",
+    "避开 MySQL 关键字，不用拼音缩写，不用无意义前缀。",
+    "状态字段统一叫 status，用注释写清每个枚举值的含义。"
+  ],
+  "snippets": [
+    {
+      "title": "一张命名规范的订单表",
+      "lang": "sql",
+      "code": "CREATE TABLE orders (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',\n  user_id BIGINT UNSIGNED NOT NULL COMMENT '下单用户 id',\n  status VARCHAR(16) NOT NULL DEFAULT 'created' COMMENT 'created/paid/shipped/done/cancelled',\n  total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00 COMMENT '订单总额（元）',\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',\n  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',\n  PRIMARY KEY (id),\n  KEY idx_user_created (user_id, created_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单主表';"
+    },
+    {
+      "title": "找出没有注释的列",
+      "lang": "sql",
+      "code": "SELECT table_name, column_name, column_type\nFROM information_schema.columns\nWHERE table_schema = DATABASE()\n  AND (column_comment = '' OR column_comment IS NULL)\nORDER BY table_name, ordinal_position;"
+    }
+  ],
+  "pitfalls": [
+    "表名用关键字 order：每次都要写反引号，ORM 自动生成的 SQL 也容易报错。",
+    "同一个库里 t_user、Users、user_info 并存：查表前先问人，新人上手成本极高。",
+    "时间列混用 create_time 和 created_at：报表 SQL 拼错列名，运行才发现。",
+    "用拼音首字母命名（ddzt 表示订单状态）：除了作者没人看得懂，交接时全靠口口相传。"
+  ],
+  "enterprise": "企业一般把命名规范写进《数据库设计规范》并在建表评审时强制检查：小写下划线、复数表名、id/created_at 等固定后缀、每列必须有注释。有些团队还用脚本扫描 information_schema，自动找出没有主键、没有注释、命名不合规的表。",
+  "related": ["create-table", "data-types", "primary-key", "unique-check-default"]
+}

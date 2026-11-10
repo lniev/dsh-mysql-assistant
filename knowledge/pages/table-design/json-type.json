@@ -1,0 +1,50 @@
+{
+  "id": "json-type",
+  "titleZh": "JSON 字段：何时用、怎么查",
+  "title": "JSON type",
+  "chapter": "table-design",
+  "difficulty": 3,
+  "minutes": 12,
+  "summary": "JSON 字段像行李箱的夹层：主结构稳定，但总会有些零散、每个商品都不一样的属性（颜色、尺码、屏幕参数）不好为它们建一堆列。MySQL 8.0 的 JSON 类型能存半结构化数据并直接查询，但它不是万能抽屉——常用作过滤条件的字段，还是应该抽成真正的列。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "JSON 类型存的是一个合法 JSON 文档，MySQL 会校验格式并按二进制优化存储，所以比用 TEXT 存 JSON 更省空间、函数支持也好。它适合「字段稀疏、结构不固定」的扩展属性；不适合把订单、用户这种核心数据整个塞进去。"
+    },
+    {
+      "heading": "怎么查里面的值",
+      "text": "用 -> 取出来仍是 JSON（带引号），用 ->> 取出来是普通字符串或数字，做比较和排序要用 ->>。路径用 '$.color' 这种写法，也可以嵌套 '$.spec.screen.size'。JSON_CONTAINS 判断包含、JSON_EXTRACT 取片段，8.0 还有 JSON_TABLE 可以把 JSON 拍平成多行。"
+    },
+    {
+      "heading": "想按 JSON 里的字段过滤怎么办",
+      "text": "直接在 WHERE 里写 attributes->>'$.color' = 'red' 通常用不上索引。常见做法是建一个生成列（STORED）把值抽出来，再在生成列上建索引；或者把高频过滤的属性提升为普通列。索引建在生成列上，查询条件也要写生成列名，才会命中。"
+    }
+  ],
+  "keyPoints": [
+    "JSON 适合稀疏、可变的扩展属性，不适合核心业务字段。",
+    "-> 返回 JSON 值，->> 返回可直接比较的字符串/数字。",
+    "JSON 路径查询默认不走索引，需要生成列 + 索引。",
+    "JSON 字段不能有默认值（8.0.13 前完全不行，之后也只能用表达式默认值）。",
+    "频繁过滤、排序、JOIN 的字段，应该抽成真正的列。"
+  ],
+  "snippets": [
+    {
+      "title": "商品表用 JSON 存扩展属性",
+      "lang": "sql",
+      "code": "CREATE TABLE products (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  category_id BIGINT UNSIGNED NOT NULL,\n  name VARCHAR(120) NOT NULL,\n  price DECIMAL(10,2) NOT NULL DEFAULT 0.00,\n  attributes JSON NULL COMMENT '颜色、尺码等扩展属性',\n  PRIMARY KEY (id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nINSERT INTO products (category_id, name, price, attributes)\nVALUES (2, '纯棉 T 恤', 79.00, '{\"color\": \"red\", \"size\": [\"M\", \"L\", \"XL\"]}');"
+    },
+    {
+      "title": "查 JSON 字段并建生成列索引",
+      "lang": "sql",
+      "code": "SELECT id, name, attributes->>'$.color' AS color\nFROM products\nWHERE JSON_CONTAINS(attributes, '\"red\"', '$.color');\n\nALTER TABLE products\n  ADD COLUMN color VARCHAR(20)\n    GENERATED ALWAYS AS (attributes->>'$.color') STORED,\n  ADD KEY idx_color (color);\n\nSELECT id, name FROM products WHERE color = 'red';"
+    }
+  ],
+  "pitfalls": [
+    "把整张订单塞进一个 JSON 列：想按时间、用户查都得全表扫，统计和改数据也非常难。",
+    "WHERE attributes->>'$.color' = 'red' 以为走了索引：路径表达式默认用不上索引，要建生成列。",
+    "用 TEXT 存 JSON：没有格式校验，脏 JSON 能写进去，函数查询还要先转换。",
+    "JSON 列和关系列混着用又没约定结构：同一个 key 一会儿是字符串一会儿是数组，代码里到处做兼容。"
+  ],
+  "enterprise": "企业里 JSON 通常出现在商品扩展属性、埋点参数、第三方回调原文这类场景，并且会约定 schema 版本号。核心查询字段一律抽列建索引；需要按 JSON 字段检索时用生成列加索引，并在代码评审时检查有没有在 JSON 路径上直接写过滤条件。",
+  "related": ["data-types", "normalization", "index-failure", "create-table"]
+}

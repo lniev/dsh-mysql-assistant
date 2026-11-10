@@ -1,0 +1,70 @@
+{
+  "id": "order-idempotency",
+  "titleZh": "订单幂等（唯一键与状态机）",
+  "title": "Order idempotency",
+  "chapter": "enterprise",
+  "difficulty": 4,
+  "minutes": 18,
+  "summary": "幂等就是同一个操作做多少次，结果都只算一次。你按电梯按钮，按三次电梯也只来一趟。支付回调因为超时重试了 5 次，系统却不能给用户发 5 次货、扣 5 次钱。防重复靠两样东西：唯一键挡住重复插入，状态机挡住重复流转，最后再让重复请求返回同一份结果。",
+  "sections": [
+    {
+      "heading": "先看业务现场",
+      "text": "用户手抖点了两次提交，生成两笔一模一样的订单；支付平台没收到响应，把回调重试了 5 次，订单被标记发货 5 次；消息队列保证至少投递一次，积分加了 3 次。这些在分布式系统里是常态，不是异常，所以每个写操作都要问一句「执行两次会怎样」。"
+    },
+    {
+      "heading": "为什么会重复",
+      "text": "网络超时后客户端重试、支付平台没收到响应就再推一次、MQ 至少一次投递、用户连点按钮。重试是为了可用性，代价就是可能重复。幂等不是可选优化，是分布式系统里写接口的基本要求。"
+    },
+    {
+      "heading": "第一道防线：唯一键",
+      "text": "给业务唯一号建 UNIQUE KEY：客户端生成的请求号、订单号、支付流水号都行。重复插入会直接报 Duplicate entry，应用捕获后不再继续，而是返回上一次的结果。这是最硬的一道防线，因为靠的是数据库的约束，不是应用的判断。"
+    },
+    {
+      "heading": "第二道防线：状态机",
+      "text": "订单只能从 0（待支付）到 1（已支付），用 UPDATE ... WHERE id = ? AND status = 0，影响行数为 0 就说明已经处理过。比「先 SELECT 判断再 UPDATE」安全，因为判断和更新是一步完成的，并发下也不会重复流转。"
+    },
+    {
+      "heading": "两招一起用",
+      "text": "唯一键把重复请求挡在入口，状态机防止同一条记录被重复推进；再加一张幂等表记录请求号和处理结果，重试时直接返回缓存结果。幂等表要按时间定期清理，否则一年后几亿行，查询和存储都成问题。"
+    }
+  ],
+  "keyPoints": [
+    "每个写接口上线前先问：同一个请求执行两次会怎样？",
+    "唯一键是最靠得住的幂等实现，靠数据库约束而不是应用判断。",
+    "状态流转用 UPDATE ... WHERE status = 旧状态，影响行数为 0 就是重复。",
+    "支付回调、MQ 消费、接口重试都必须幂等。",
+    "幂等要返回相同结果，而不是第二次直接报错让调用方不知所措。",
+    "幂等记录要有过期清理，避免表无限增长。"
+  ],
+  "snippets": [
+    {
+      "title": "幂等记录表：请求号唯一",
+      "lang": "sql",
+      "code": "CREATE TABLE idempotency_record (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  idempotency_key VARCHAR(64) NOT NULL,\n  biz_type VARCHAR(32) NOT NULL,\n  biz_id BIGINT UNSIGNED NOT NULL,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id),\n  UNIQUE KEY uk_key (idempotency_key),\n  KEY idx_created (created_at)\n) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;\nINSERT INTO idempotency_record (idempotency_key, biz_type, biz_id)\nVALUES ('pay-callback-20261110-0001', 'pay_callback', 9001);"
+    },
+    {
+      "title": "状态机更新：重复请求影响行数为 0",
+      "lang": "sql",
+      "code": "UPDATE orders\nSET status = 1, paid_at = NOW()\nWHERE id = 9001 AND status = 0;\nSELECT ROW_COUNT() AS affected_rows;"
+    },
+    {
+      "title": "重复订单号靠唯一键兜底",
+      "lang": "sql",
+      "code": "ALTER TABLE orders ADD UNIQUE KEY uk_order_no (order_no);\nINSERT INTO orders (order_no, user_id, status, total_amount)\nVALUES ('20261110000001', 1001, 0, 199.00)\nON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id);\nSELECT LAST_INSERT_ID() AS order_id;"
+    }
+  ],
+  "pitfalls": [
+    "先 SELECT 查有没有再 INSERT：并发下两个请求都查到「没有」，还是插两条，必须靠唯一键。",
+    "唯一键报错后直接返回 500：调用方以为失败会继续重试，应该捕获 Duplicate entry 并返回已有结果。",
+    "状态判断用 status != 1 或范围判断：并发下仍可能重复流转，必须 WHERE status = 明确的旧状态。",
+    "幂等键用自增 id 或时间戳：重试时键变了就失效，要用客户端生成的稳定请求号。"
+  ],
+  "enterprise": "支付回调、退款、MQ 消费、开放平台接口这四类必须幂等。落地顺序：先加唯一键（订单号、支付流水号、请求号），再补状态机 UPDATE，最后加幂等表缓存结果。幂等键由调用方生成并随重试保持不变；幂等表按月清理；对账任务兜底发现重复订单和重复扣款。",
+  "related": [
+    "ecommerce-schema",
+    "outbox-consistency",
+    "unique-check-default",
+    "transaction-pitfalls",
+    "acid"
+  ]
+}

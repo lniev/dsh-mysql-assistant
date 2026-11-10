@@ -1,0 +1,69 @@
+{
+  "id": "install-and-connect",
+  "titleZh": "安装与连接 MySQL",
+  "title": "Install & connect",
+  "chapter": "start",
+  "difficulty": 1,
+  "minutes": 15,
+  "summary": "装 MySQL 和装一个 App 差不多：先用 Docker 或安装包把服务跑起来，再用客户端「地址 + 端口 + 账号密码」连上去。区别是它没有界面，第一次要先搞定端口、root 密码和字符集，否则不是连不上就是乱码。",
+  "sections": [
+    {
+      "heading": "一句话理解：服务端和客户端是两件事",
+      "text": "MySQL 服务端（mysqld）监听 3306 端口、管理数据；客户端（mysql 命令行、Navicat、DBeaver、你的程序）只是连上去发 SQL。装 MySQL 主要指装服务端，再准备一个顺手的客户端。两者装在同一台机器或分开都行。"
+    },
+    {
+      "heading": "用 Docker 三分钟跑起来",
+      "text": "一条命令拉镜像并启动：docker run --name mysql8 -e MYSQL_ROOT_PASSWORD=你的密码 -p 3306:3306 -v mysql_data:/var/lib/mysql -d mysql:8.0。注意 -p 把容器端口映射到宿主机，-v 把数据挂到卷上，否则删容器等于删库。本地学习用 Docker 最省事，卸载也干净。"
+    },
+    {
+      "heading": "连上去的三种方式",
+      "text": "命令行：mysql -h 127.0.0.1 -P 3306 -u root -p，回车后输密码。图形工具：Navicat、DBeaver、MySQL Workbench 填主机、端口、用户、密码。程序里：Java 用 JDBC，连接串类似 jdbc:mysql://127.0.0.1:3306/shop?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8。"
+    },
+    {
+      "heading": "连不上先查这四样",
+      "text": "一看端口和防火墙，3306 是否放通；二看 bind-address，默认 127.0.0.1 就只允许本机连；三看账号的 host 权限，'root'@'localhost' 和 'root'@'%' 是两回事；四看连接数是否打满。密码错反而最好排查，报错会直说 Access denied。"
+    },
+    {
+      "heading": "装完先顺手做三件事",
+      "text": "把 root 限制在本地，给业务单独建账号并只授予必要权限；统一字符集为 utf8mb4；设置时区（serverTimezone 或 time_zone），避免时间差 8 小时。这三件事不做好，后面一定会踩坑。"
+    }
+  ],
+  "keyPoints": [
+    "MySQL 分服务端（mysqld，监听 3306）和客户端（命令行、GUI、程序）。",
+    "学习环境首选 Docker，但必须挂数据卷，否则删容器等于删库。",
+    "命令行连接格式：mysql -h 主机 -P 端口 -u 用户 -p。",
+    "远程连不上先查 bind-address、账号 host 权限、防火墙和连接数。",
+    "生产禁用 root 直连业务，按应用建最小权限账号。",
+    "连接串要显式指定字符集和时区，避免乱码与时间偏差。"
+  ],
+  "snippets": [
+    {
+      "title": "连上后确认身份、端口和字符集",
+      "lang": "sql",
+      "code": "SELECT USER() AS login_user, CURRENT_USER() AS auth_user, CONNECTION_ID() AS conn_id;\nSELECT @@port AS port, @@character_set_server AS charset, @@time_zone AS tz;"
+    },
+    {
+      "title": "建一个只能增删改查的业务账号",
+      "lang": "sql",
+      "code": "CREATE USER 'shop_app'@'%' IDENTIFIED BY 'ChangeMe_2026';\nGRANT SELECT, INSERT, UPDATE, DELETE ON shop.* TO 'shop_app'@'%';\nFLUSH PRIVILEGES;"
+    },
+    {
+      "title": "看当前账号能看到哪些库",
+      "lang": "sql",
+      "code": "SHOW DATABASES;"
+    }
+  ],
+  "pitfalls": [
+    "生产直接用 root 跑业务：权限过大，一次注入就是整库沦陷。",
+    "命令行里把密码贴在 -p 后面：密码会进 shell 历史和进程列表，交互输入才安全。",
+    "只把 bind-address 改成 0.0.0.0 就以为能远程连：账号 host 限制、防火墙、云安全组还有三道关。",
+    "Docker 不挂数据卷：docker rm 之后数据一起消失，误以为 MySQL 丢数据。"
+  ],
+  "enterprise": "企业里连接层就是安全边界：按应用建独立账号、只给必要库表权限、密码进密钥管理并定期轮换；生产禁用 root 远程登录，连接必须走内网或跳板机；连接串统一配置超时、重试和字符集，避免每个服务各写一套。",
+  "related": [
+    "first-database",
+    "user-privileges",
+    "charset-collation",
+    "what-is-mysql"
+  ]
+}

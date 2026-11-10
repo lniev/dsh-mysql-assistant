@@ -1,0 +1,69 @@
+{
+  "id": "delete",
+  "titleZh": "DELETE 与 TRUNCATE：删除数据",
+  "title": "DELETE & TRUNCATE",
+  "chapter": "sql-basics",
+  "difficulty": 1,
+  "minutes": 10,
+  "summary": "DELETE 是「撕掉某一页」，TRUNCATE 是「把整本本子换新的」。前者要 WHERE 指定行、在事务里能回滚；后者清空整表、速度极快但隐式提交、不能回滚。删数据前先确认 WHERE，再确认备份。",
+  "sections": [
+    {
+      "heading": "一句话理解：三种删除",
+      "text": "DELETE FROM 表 WHERE ... 按行删；TRUNCATE TABLE 表 清空整表；DROP TABLE 表 连表结构一起删。危险程度依次上升：DROP 最狠，TRUNCATE 次之（数据没了但表还在），DELETE 最可控（可以带条件、可以回滚）。"
+    },
+    {
+      "heading": "DELETE 怎么写才安全",
+      "text": "先写 SELECT 同条件确认要删的数据和行数，再改成 DELETE；放在事务里执行，确认 ROW_COUNT() 后提交；大批量删除分批做，每批几千行，避免长事务、锁等待和主从延迟。"
+    },
+    {
+      "heading": "TRUNCATE 的特点",
+      "text": "TRUNCATE 是 DDL，会隐式提交，事务里执行也无法回滚；速度快是因为它直接重建表空间；它会重置 AUTO_INCREMENT；不能带 WHERE。有外键引用该表时，TRUNCATE 会直接失败。"
+    },
+    {
+      "heading": "删了不等于磁盘空间回来",
+      "text": "InnoDB 删除只是打标记，空间留在表空间里，后面的插入可以复用。大量删除后磁盘没变小是正常的；要回收空间得重建表或执行 OPTIMIZE TABLE，大表很慢，要在低峰做。"
+    },
+    {
+      "heading": "软删除的取舍",
+      "text": "很多业务不物理删，而是加 is_deleted 标记：可恢复、可审计，但查询都要带 is_deleted = 0，索引和数据量都会膨胀。重要数据用「软删除加定期归档」，比直接 DELETE 稳。"
+    }
+  ],
+  "keyPoints": [
+    "DELETE 按行删、可回滚（事务内），TRUNCATE 清整表、隐式提交、不能回滚。",
+    "DELETE 不带 WHERE 等于清空全表，速度还比 TRUNCATE 慢。",
+    "TRUNCATE 会重置 AUTO_INCREMENT，并且在有外键引用时失败。",
+    "DELETE 不释放磁盘空间，大量删除后要重建表或 OPTIMIZE。",
+    "重要业务用软删除加归档，别直接物理删。",
+    "大批量删除要分批提交，避免长事务和主从延迟。"
+  ],
+  "snippets": [
+    {
+      "title": "按订单删除明细",
+      "lang": "sql",
+      "code": "DELETE FROM order_items\nWHERE order_id = 1001;"
+    },
+    {
+      "title": "分批删除历史订单",
+      "lang": "sql",
+      "code": "DELETE FROM orders\nWHERE status = 'closed'\n  AND created_at < '2024-01-01'\nORDER BY id\nLIMIT 1000;"
+    },
+    {
+      "title": "TRUNCATE 演示（自建自清，别直接对业务表执行）",
+      "lang": "sql",
+      "code": "CREATE TABLE IF NOT EXISTS order_audit_log (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  order_id BIGINT UNSIGNED NOT NULL,\n  action VARCHAR(32) NOT NULL,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id)\n) ENGINE = InnoDB;\n\nTRUNCATE TABLE order_audit_log;"
+    }
+  ],
+  "pitfalls": [
+    "DELETE 忘 WHERE：全表清空，只能从 binlog 或备份恢复。",
+    "以为 TRUNCATE 能回滚：它隐式提交，事务里执行也回不去。",
+    "大量 DELETE 后磁盘没变小：InnoDB 只是标记删除，需要重建表回收。",
+    "被外键引用的表执行 TRUNCATE：报 Cannot truncate a table referenced in a foreign key constraint。"
+  ],
+  "enterprise": "删除操作走审批和软删除，定期归档历史数据；分批删除避免大事务和主从延迟；物理删除要评估备份和 binlog 的合规要求，敏感数据还要考虑备份里的残留；生产环境禁用不带 WHERE 的 DELETE，提交前必须有人 review。",
+  "related": [
+    "update",
+    "insert",
+    "soft-delete",
+    "transaction-pitfalls"
+  ]
+}

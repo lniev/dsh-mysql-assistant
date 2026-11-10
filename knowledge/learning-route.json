@@ -1,0 +1,924 @@
+{
+  "titleZh": "MySQL 学习路线",
+  "intro": "面向想系统掌握 MySQL、能独立负责线上数据库的工程师：先建立直觉，再练 SQL 与表设计，然后进入索引、事务、架构与安全，最后用企业实战串起来。每个阶段都有目标、交付物和验收标准，item 里的 practice 都能直接在知识地图和 SQL 操练场执行，勾选记录进度。",
+  "totalHours": 72,
+  "tracks": [
+    {
+      "id": "backend",
+      "titleZh": "后端开发主线",
+      "description": "从零到能独立设计、优化并上线一套业务库，完整走完 7 个阶段。",
+      "stageIds": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7"
+      ]
+    },
+    {
+      "id": "fast",
+      "titleZh": "有 SQL 基础速通",
+      "description": "已经会写增删改查，跳过前两个阶段，直攻索引、事务、架构与企业实战。",
+      "stageIds": [
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7"
+      ]
+    },
+    {
+      "id": "ops",
+      "titleZh": "DBA / 运维方向",
+      "description": "关注稳定性：索引与慢查询、复制与备份、安全监控调优，最后用电商场景验证。",
+      "stageIds": [
+        "s1",
+        "s4",
+        "s5",
+        "s6",
+        "s7"
+      ]
+    }
+  ],
+  "stages": [
+    {
+      "id": "s1",
+      "title": "Stage 1 · 建立直觉与第一条查询",
+      "titleZh": "建立直觉与第一条查询",
+      "weeks": "第 1 周",
+      "goal": "知道 MySQL 由哪几层组成、一条查询怎么被处理，能连上数据库、建出第一张表并写出第一条 SELECT。",
+      "hours": 6,
+      "items": [
+        {
+          "id": "s1-1",
+          "title": "认识 MySQL 与它的分层架构",
+          "goal": "用自己的话讲清连接层、Server 层、存储引擎层各自负责什么，知道 InnoDB 是默认引擎。",
+          "points": [
+            "MySQL 是关系型数据库，数据最终以 B+ 树结构落在磁盘上",
+            "连接层管身份认证与线程，Server 层管解析、优化、执行，引擎层管数据怎么存",
+            "InnoDB 支持事务与行锁，MyISAM 不支持，新项目一律选 InnoDB"
+          ],
+          "deliverable": "一张手绘的 MySQL 分层图 + 100 字说明「一条 SQL 从客户端到磁盘经过了谁」",
+          "accept": "不看资料能向同事解释清楚连接层、Server 层、引擎层各自的职责，并说出为什么默认用 InnoDB",
+          "minutes": 60,
+          "level": "L1",
+          "pageIds": [
+            "what-is-mysql",
+            "architecture",
+            "storage-engines"
+          ],
+          "practice": "在知识地图里依次点开「MySQL 是什么」「MySQL 的架构分层」「存储引擎」三页，合上书把分层图默画一遍；再去 SQL 操练场执行 SELECT VERSION(); 和 SHOW ENGINES;，确认默认引擎是 InnoDB。"
+        },
+        {
+          "id": "s1-2",
+          "title": "装好并连上 MySQL",
+          "goal": "在本机（或 Docker）跑起一个 MySQL 8.0 实例，能用命令行客户端连上并看到版本。",
+          "points": [
+            "公司新项目直接用 8.0：窗口函数、CTE、Online DDL 都依赖它",
+            "mysql -h 127.0.0.1 -P 3306 -u root -p 是最常用的连接方式",
+            "连接失败先查三件事：服务是否启动、端口是否通、账号密码与 host 是否匹配"
+          ],
+          "deliverable": "一条能连上数据库的命令 + 一张截图（client 里 SELECT VERSION() 的输出）",
+          "accept": "关掉终端重新打开，仍能在 1 分钟内连上数据库并执行一条查询",
+          "minutes": 60,
+          "level": "L1",
+          "pageIds": [
+            "install-and-connect",
+            "version-choice"
+          ],
+          "practice": "按知识地图「安装与连接 MySQL」一页的步骤装好 8.0，在 SQL 操练场里跑 SELECT VERSION(); 和 SHOW DATABASES;，把连接命令记进自己的速查表。"
+        },
+        {
+          "id": "s1-3",
+          "title": "第一次建库、建表、插数据",
+          "goal": "能独立写出 CREATE DATABASE / CREATE TABLE / INSERT，并说清每个字段为什么选这个类型。",
+          "points": [
+            "库和表都要显式指定 utf8mb4，否则中文和 emoji 会出问题",
+            "建表时先定主键，再定业务字段，最后补索引",
+            "金额用 DECIMAL，不用 FLOAT / DOUBLE"
+          ],
+          "deliverable": "一个 shop 库 + users、products 两张表的建表 SQL，外加 3 条测试数据",
+          "accept": "从零开始不看示例，10 分钟内建出两张带主键、非空、默认值的表并插入数据",
+          "minutes": 120,
+          "level": "L1",
+          "pageIds": [
+            "first-database",
+            "create-table",
+            "data-types"
+          ],
+          "practice": "在 SQL 操练场建一张 users 表（id、name、phone、city、created_at），插入两条数据再查出来；再打开知识地图「CREATE TABLE」一页对照字段定义，检查自己漏了哪些约束。"
+        },
+        {
+          "id": "s1-4",
+          "title": "一条 SQL 的执行旅程",
+          "goal": "能按顺序说出连接器 → 解析器 → 优化器 → 执行器 → 存储引擎各做了什么。",
+          "points": [
+            "SQL 是声明式语言：你只说要什么，优化器决定怎么取",
+            "优化器会基于统计信息选索引，选错时执行计划会变差",
+            "权限校验发生在连接器阶段，SQL 注入绕不过去的是「拼接」而不是「执行」"
+          ],
+          "deliverable": "一段 200 字的口述稿：一条 SELECT 从客户端到返回结果经过了哪些环节",
+          "accept": "能画出执行链路，并指出慢查询可能卡在哪一环（解析、优化、执行还是取数据）",
+          "minutes": 60,
+          "level": "L2",
+          "pageIds": [
+            "sql-execution-path"
+          ],
+          "practice": "在知识地图打开「一条 SQL 的执行旅程」，边看边在纸上画链路；然后在 SQL 操练场对同一条查询分别跑 EXPLAIN 和 EXPLAIN FORMAT=JSON，观察优化器给出的访问方式。"
+        },
+        {
+          "id": "s1-5",
+          "title": "字符集与排序规则：别让中文变问号",
+          "goal": "知道 utf8mb4 与 utf8mb3 的区别，能查出并修正库、表、字段的字符集。",
+          "points": [
+            "MySQL 里的 utf8 是 utf8mb3，存不了 emoji，统一用 utf8mb4",
+            "排序规则决定字符串比较与排序，「大小写不敏感」由 collation 决定",
+            "库、表、字段、连接四个层级都要对齐，否则仍可能乱码"
+          ],
+          "deliverable": "一份字符集自查清单（库 / 表 / 字段 / 连接四个层级分别怎么查、怎么改）",
+          "accept": "能查出某个表的字符集，并把一个 latin1 字段改成 utf8mb4 且验证中文正常",
+          "minutes": 60,
+          "level": "L1",
+          "pageIds": [
+            "charset-collation",
+            "first-database"
+          ],
+          "practice": "在 SQL 操练场执行 SHOW VARIABLES LIKE 'character_set%'; 和 SHOW FULL COLUMNS FROM users;，对照知识地图「字符集与排序规则」一页，把四个层级的检查命令抄进自查清单。"
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "title": "Stage 2 · SQL 查询基础",
+      "titleZh": "SQL 查询基础",
+      "weeks": "第 2~3 周",
+      "goal": "把「查数据」和「改数据」练到不用查手册：条件筛选、排序分页、聚合分组、多表连接、子查询与写入。",
+      "hours": 10,
+      "items": [
+        {
+          "id": "s2-1",
+          "title": "SELECT 与 WHERE：从表里挑行列",
+          "goal": "能写出带等值、范围、IN、LIKE、组合条件的查询，并知道 SQL 的执行顺序。",
+          "points": [
+            "SELECT 决定列，WHERE 决定行，顺序是 FROM → WHERE → GROUP BY → ORDER BY → LIMIT",
+            "字符串和日期用单引号，数字不要加引号",
+            "OR 混用 AND 必须加括号，否则优先级会把条件拆错"
+          ],
+          "deliverable": "10 条覆盖不同过滤条件的电商查询（订单、商品、用户各 3 条以上）",
+          "accept": "给定「查最近 7 天金额大于 100 的已支付订单」，能一次写对且知道为什么这样写",
+          "minutes": 90,
+          "level": "L1",
+          "pageIds": [
+            "select-basics",
+            "where-filter"
+          ],
+          "practice": "去 SQL 操练场在订单表上写 5 条不同的 WHERE 查询（等值 / 范围 / IN / LIKE / 组合），把结果贴到笔记里；再去知识地图「WHERE」页核对 OR 加括号和函数包列这两个坑。"
+        },
+        {
+          "id": "s2-2",
+          "title": "NULL、去重与排序分页",
+          "goal": "分清 IS NULL 与 = NULL，会用 DISTINCT 去重、用 ORDER BY + LIMIT 做分页。",
+          "points": [
+            "NULL 表示「未知」，任何与 NULL 的比较结果都是 NULL，必须用 IS NULL",
+            "ORDER BY 默认升序，多列排序从左到右生效",
+            "LIMIT offset, size 的 offset 越大越慢，这是后面深分页优化的起点"
+          ],
+          "deliverable": "一份「NULL / DISTINCT / 排序分页」三种写法的对照笔记，各带一条正确示例",
+          "accept": "能解释为什么 WHERE amount = NULL 查不到数据，以及 ORDER BY 里放函数为什么可能变慢",
+          "minutes": 90,
+          "level": "L2",
+          "pageIds": [
+            "null-handling",
+            "distinct",
+            "order-limit"
+          ],
+          "practice": "在 SQL 操练场用 NULL 做实验：插入一条 phone 为 NULL 的用户，分别用 = NULL 和 IS NULL 查，记录结果差异；再用 ORDER BY created_at DESC LIMIT 10, 10 翻到第二页。"
+        },
+        {
+          "id": "s2-3",
+          "title": "聚合与分组统计",
+          "goal": "会用 COUNT / SUM / AVG / MAX 和 GROUP BY / HAVING 做业务统计。",
+          "points": [
+            "COUNT(*) 数行数，COUNT(列) 不数 NULL，两者在报表里结果可能不同",
+            "WHERE 在分组前过滤行，HAVING 在分组后过滤组",
+            "SELECT 里的非聚合列必须出现在 GROUP BY 中（ONLY_FULL_GROUP_BY 默认开启）"
+          ],
+          "deliverable": "三条统计 SQL：每日订单量、每个用户消费总额、消费超过 1000 的用户",
+          "accept": "能说清 WHERE 和 HAVING 的区别，并写出一条「分组后筛选」的正确语句",
+          "minutes": 120,
+          "level": "L2",
+          "pageIds": [
+            "aggregate-functions",
+            "group-by",
+            "having"
+          ],
+          "practice": "去 SQL 操练场按天统计订单金额（GROUP BY DATE(created_at)），再用 HAVING 筛出金额超过阈值的分组；把写错的那版也留着，对照知识地图「HAVING」页总结错因。"
+        },
+        {
+          "id": "s2-4",
+          "title": "多表连接：INNER / LEFT / RIGHT JOIN",
+          "goal": "能根据业务问题选对连接方式，避免「少数据」和「多数据」两类经典错误。",
+          "points": [
+            "INNER JOIN 只留两边都匹配的行，LEFT JOIN 保留左表全部行",
+            "LEFT JOIN 后把右表条件写在 WHERE 里，会退化成 INNER JOIN",
+            "一对多连接再聚合时，先确认会不会把金额重复累加"
+          ],
+          "deliverable": "一条「用户 + 订单 + 订单项 + 商品」的四表联查，结果包含用户名、商品名、小计",
+          "accept": "能判断业务该用 INNER 还是 LEFT，并能解释一对多连接后 SUM 金额翻倍的原因与修法",
+          "minutes": 120,
+          "level": "L3",
+          "pageIds": [
+            "join-inner",
+            "join-outer"
+          ],
+          "practice": "在 SQL 操练场写四表联查（orders + order_items + products + users），再用 LEFT JOIN 找出「从没下过单的用户」，把两种写法的结果差异记下来。"
+        },
+        {
+          "id": "s2-5",
+          "title": "子查询、UNION 与表达式",
+          "goal": "会把子查询改写成 JOIN / EXISTS，知道 UNION 与 UNION ALL 的区别与代价。",
+          "points": [
+            "标量子查询、IN 子查询、EXISTS 子查询适用场景不同",
+            "UNION 会去重排序（有开销），能确定无重复时用 UNION ALL",
+            "别名只属于本次查询，WHERE 里不能用 SELECT 定义的别名"
+          ],
+          "deliverable": "两组等价写法对比：子查询版 vs JOIN 版，各自 EXPLAIN 结果抓图",
+          "accept": "能对同一业务问题给出子查询与 JOIN 两种写法，并用 EXPLAIN 说明哪种更快",
+          "minutes": 90,
+          "level": "L3",
+          "pageIds": [
+            "subquery",
+            "union",
+            "expressions-aliases"
+          ],
+          "practice": "在 SQL 操练场用子查询查「消费金额高于平均值的用户」，再改写成 JOIN 版；对两条语句都跑 EXPLAIN，把 type 和 rows 的变化记进笔记。"
+        },
+        {
+          "id": "s2-6",
+          "title": "写入数据：INSERT / UPDATE / DELETE",
+          "goal": "安全地写数据：先 SELECT 验证再 UPDATE，知道 DELETE 与 TRUNCATE 的区别。",
+          "points": [
+            "UPDATE / DELETE 前先用同样的 WHERE 写 SELECT，确认影响行数",
+            "DELETE 走事务、可回滚、可带 WHERE；TRUNCATE 是 DDL、不可回滚、重置自增",
+            "批量插入用一条 INSERT ... VALUES (...), (...), (...) 比循环单条快得多"
+          ],
+          "deliverable": "一份「写操作安全规程」：每条 UPDATE / DELETE 都必须先跑 SELECT 验证",
+          "accept": "能在不锁全表的前提下安全修改一批订单状态，并说明为什么先 SELECT 再 UPDATE",
+          "minutes": 90,
+          "level": "L2",
+          "pageIds": [
+            "insert",
+            "update",
+            "delete"
+          ],
+          "practice": "在 SQL 操练场批量插入 3 条订单，先 SELECT 确认目标行，再 UPDATE 改状态，最后用 DELETE 删掉测试数据并观察自增值变化。"
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "title": "Stage 3 · 表设计与数据建模",
+      "titleZh": "表设计与数据建模",
+      "weeks": "第 3~4 周",
+      "goal": "能独立设计一套业务表：类型选对、主键定好、约束齐全、范式与冗余取舍有理由。",
+      "hours": 9,
+      "items": [
+        {
+          "id": "s3-1",
+          "title": "数据类型与金额、时间存储",
+          "goal": "能按业务选对类型：金额用 DECIMAL、时间用 DATETIME / TIMESTAMP、状态用 TINYINT。",
+          "points": [
+            "DECIMAL(10,2) 精确存金额，FLOAT / DOUBLE 有精度误差",
+            "DATETIME 不带时区，TIMESTAMP 带时区且范围到 2038 年",
+            "VARCHAR 长度按业务上限给，不要一律 VARCHAR(255)"
+          ],
+          "deliverable": "一张「字段 → 类型 → 理由」对照表，覆盖金额、时间、状态、文本、JSON 五类字段",
+          "accept": "能解释为什么金额不能用 FLOAT，并给出订单表里每个字段的类型与理由",
+          "minutes": 120,
+          "level": "L2",
+          "pageIds": [
+            "data-types",
+            "decimal-money",
+            "time-types"
+          ],
+          "practice": "去 SQL 操练场建一张 products 表，price 用 DECIMAL(10,2)、上架时间用 DATETIME；再故意用 FLOAT 存 0.1+0.2，把对比结果贴进笔记。"
+        },
+        {
+          "id": "s3-2",
+          "title": "主键、自增与唯一约束",
+          "goal": "知道自增主键为什么适合 InnoDB，会用唯一索引兜住业务唯一性。",
+          "points": [
+            "InnoDB 聚簇索引按主键组织数据，自增主键写入是顺序追加，不会页分裂",
+            "UUID 主键随机写入会导致页分裂、索引膨胀",
+            "业务唯一（手机号、订单号）用 UNIQUE 约束，不要靠代码保证"
+          ],
+          "deliverable": "一张 users 表 + 一张 orders 表，主键、自增、唯一约束、默认值、非空全部写对",
+          "accept": "能解释自增主键 vs UUID 的性能差异，并说明唯一约束和「先查再插」的本质区别",
+          "minutes": 90,
+          "level": "L2",
+          "pageIds": [
+            "primary-key",
+            "auto-increment",
+            "unique-check-default"
+          ],
+          "practice": "在 SQL 操练场给 orders.order_no 加唯一索引，然后重复插入同一个订单号，观察报错；再到知识地图「自增主键」页对照页分裂的解释。"
+        },
+        {
+          "id": "s3-3",
+          "title": "外键与数据完整性",
+          "goal": "理解外键在数据库层保证引用完整性，也知道互联网业务为什么常用应用层校验替代。",
+          "points": [
+            "外键保证子表引用的父表记录一定存在",
+            "外键会加锁检查，高并发写入场景可能成为瓶颈",
+            "逻辑删除 + 外键容易冲突，很多团队改用应用层 + 定期对账"
+          ],
+          "deliverable": "一份「外键用不用」决策记录：列出本项目哪些表用外键、哪些不用及原因",
+          "accept": "能说出外键带来的好处与代价，并给出自己项目的选型结论",
+          "minutes": 90,
+          "level": "L3",
+          "pageIds": [
+            "foreign-key",
+            "create-table"
+          ],
+          "practice": "在 SQL 操练场给 order_items 加外键指向 orders，再尝试删除被引用的订单，观察报错；然后 DROP 外键，对比应用层校验的做法。"
+        },
+        {
+          "id": "s3-4",
+          "title": "三范式与反范式（通俗版）",
+          "goal": "会判断什么时候该拆表、什么时候该冗余字段，能讲清冗余的代价。",
+          "points": [
+            "三范式目标是消除重复与更新异常，不是教条",
+            "报表、订单快照常故意冗余（下单时把商品名、价格存进 order_items）",
+            "冗余字段要写清「谁负责同步」，否则一定出现数据不一致"
+          ],
+          "deliverable": "一张电商库的表关系图（users / products / orders / order_items / payments），标出冗余字段及同步方",
+          "accept": "能对「订单项里要不要存商品名和单价」给出有理由的结论",
+          "minutes": 150,
+          "level": "L3",
+          "pageIds": [
+            "normalization"
+          ],
+          "practice": "在知识地图打开「三范式与反范式」，用自己的电商库画关系图；再用 SQL 操练场的订单数据验证：如果订单项不存 unit_price，改价后历史订单金额会怎么变。"
+        },
+        {
+          "id": "s3-5",
+          "title": "命名规范、状态字段与软删除",
+          "goal": "定出团队级命名规范，会用状态字段和软删除而不把数据库搞脏。",
+          "points": [
+            "表名小写下划线、字段名见名知意，created_at / updated_at 统一",
+            "状态用 TINYINT + 注释，枚举值集中在一处维护",
+            "软删除要建索引，且所有查询必须带 is_deleted = 0，漏一处就出 bug"
+          ],
+          "deliverable": "一份团队命名规范（表 / 字段 / 索引名）+ 一张带状态机说明的订单表",
+          "accept": "能指出软删除在唯一索引、统计、归档三处的坑，并给出规避方案",
+          "minutes": 90,
+          "level": "L2",
+          "pageIds": [
+            "naming-conventions",
+            "soft-delete",
+            "json-type"
+          ],
+          "practice": "在 SQL 操练场给 orders 加 status 与 is_deleted 字段，写一条「只查未删除已支付订单」的查询；再去知识地图「软删除」页对照唯一索引冲突的坑。"
+        }
+      ]
+    },
+    {
+      "id": "s4",
+      "title": "Stage 4 · 索引与查询优化",
+      "titleZh": "索引与查询优化",
+      "weeks": "第 5~6 周",
+      "goal": "能给慢查询定位、看懂执行计划，并用联合索引 / 覆盖索引 / 深分页改写把查询从秒级降到毫秒级。",
+      "hours": 12.5,
+      "items": [
+        {
+          "id": "s4-1",
+          "title": "索引是什么：从目录到 B+ 树",
+          "goal": "能用「书的目录」讲清索引的作用，说出 B+ 树为什么适合做索引。",
+          "points": [
+            "索引是排好序的数据结构，把 O(n) 扫描变成 O(log n) 查找",
+            "B+ 树矮胖、叶子节点有序且相连，适合范围查询与排序",
+            "索引有代价：占空间、拖慢写入，不是越多越好"
+          ],
+          "deliverable": "一张 B+ 树示意图（根、中间节点、叶子节点、叶子间链表）",
+          "accept": "能解释为什么 B+ 树 3 层就能存两千万行，以及范围查询为什么快",
+          "minutes": 90,
+          "level": "L2",
+          "pageIds": [
+            "index-concept",
+            "btree-index"
+          ],
+          "practice": "在知识地图依次看「索引是什么」「B+ 树」两页，画三层 B+ 树示意图；再到 SQL 操练场给 orders(status) 建索引，用 EXPLAIN 对比建索引前后的 type 与 rows。"
+        },
+        {
+          "id": "s4-2",
+          "title": "聚簇索引、二级索引与回表",
+          "goal": "分清主键索引与二级索引的存储差异，理解回表为什么会慢。",
+          "points": [
+            "InnoDB 表本身就是按主键组织的聚簇索引，叶子节点存整行",
+            "二级索引叶子节点存的是索引列 + 主键值，查其他列要回表",
+            "回表次数多时，优化器可能放弃索引直接全表扫描"
+          ],
+          "deliverable": "一份「一次查询走几次回表」的分析笔记（至少 3 条查询）",
+          "accept": "能预测一条查询是否需要回表，并用 EXPLAIN 的 Extra 字段验证",
+          "minutes": 120,
+          "level": "L3",
+          "pageIds": [
+            "clustered-index",
+            "secondary-index"
+          ],
+          "practice": "在 SQL 操练场对 SELECT id, status FROM orders WHERE status = 'paid' 与 SELECT * FROM orders WHERE status = 'paid' 分别 EXPLAIN，对比 Extra 是否出现回表；记到知识地图「二级索引」页旁边。"
+        },
+        {
+          "id": "s4-3",
+          "title": "联合索引与最左前缀",
+          "goal": "会设计联合索引顺序，能判断一条查询能用到索引的哪几列。",
+          "points": [
+            "联合索引 (a,b,c) 相当于按 a、再按 b、再按 c 排序",
+            "最左前缀：跳过 a 直接查 b 用不上索引；范围查询后的列用不上",
+            "等值列放前、范围列放后、排序列跟最后"
+          ],
+          "deliverable": "三条慢查询 + 对应的联合索引设计，附 EXPLAIN 前后对比",
+          "accept": "给定 (user_id, status, created_at) 索引，能判断哪些 WHERE 组合能用上、哪些用不上",
+          "minutes": 150,
+          "level": "L3",
+          "pageIds": [
+            "composite-index",
+            "where-filter"
+          ],
+          "practice": "在 SQL 操练场建联合索引 idx_user_status_time(user_id, status, created_at)，分别执行三组 WHERE 条件并 EXPLAIN，验证最左前缀；把用不上索引的那组改写成能用的形式。"
+        },
+        {
+          "id": "s4-4",
+          "title": "覆盖索引与索引失效",
+          "goal": "会用覆盖索引消除回表，能识别函数包列、隐式转换、前导 % 等失效场景。",
+          "points": [
+            "查询的列都在索引里就不用回表，Extra 显示 Using index",
+            "索引列上做函数、运算、隐式类型转换都会失效",
+            "LIKE '%xx' 用不上索引，能改成前缀匹配或前缀索引就别用前导 %"
+          ],
+          "deliverable": "一份「索引失效场景清单 + 改写前后对比」至少 5 组",
+          "accept": "能给出一条用了函数导致失效的 SQL 并改成走索引的版本，且 EXPLAIN 验证通过",
+          "minutes": 120,
+          "level": "L3",
+          "pageIds": [
+            "covering-index",
+            "index-failure"
+          ],
+          "practice": "去 SQL 操练场把 WHERE DATE(created_at) = '2026-01-01' 改写成范围条件，再补一个覆盖索引，对比 EXPLAIN 的 type / Extra 变化；把 5 类失效写法整理进清单。"
+        },
+        {
+          "id": "s4-5",
+          "title": "EXPLAIN、慢查询日志与优化器",
+          "goal": "会开慢查询日志找 TOP SQL，会用 EXPLAIN 读 type / key / rows / Extra 四列。",
+          "points": [
+            "slow_query_log + long_query_time 是找慢 SQL 的第一入口",
+            "type 从好到差：const → eq_ref → ref → range → index → ALL",
+            "rows 是优化器估算的扫描行数，统计信息过期会导致选错索引"
+          ],
+          "deliverable": "一份慢查询分析报告：取 3 条 SQL，附 EXPLAIN 结果、问题判断与优化建议",
+          "accept": "能根据 EXPLAIN 判断一条 SQL 是全表扫描还是走索引，并说明理由",
+          "minutes": 120,
+          "level": "L3",
+          "pageIds": [
+            "explain",
+            "slow-query-log",
+            "optimizer-stats"
+          ],
+          "practice": "在 SQL 操练场打开慢查询日志（SET GLOBAL slow_query_log = ON），跑几条没有索引的查询，再用 EXPLAIN 逐条分析；对照知识地图「EXPLAIN」页把四列含义抄下来。"
+        },
+        {
+          "id": "s4-6",
+          "title": "索引设计清单与深分页优化",
+          "goal": "能按「高频查询 → 联合索引 → 覆盖索引」顺序设计索引，并用游标法改写深分页。",
+          "points": [
+            "索引设计从查询出发：先列高频 SQL，再合并同类条件的联合索引",
+            "LIMIT 1000000, 20 要先扫 100 万行再丢弃，必须改写",
+            "游标法（WHERE id > 上一页最大 id）或延迟关联（先查主键再回表）解决深分页"
+          ],
+          "deliverable": "一份索引设计清单（每个索引对应哪条查询、为什么是这个顺序）",
+          "accept": "能把 LIMIT 1000000, 20 改写成等价且快的游标分页，并解释为什么快",
+          "minutes": 150,
+          "level": "L4",
+          "pageIds": [
+            "index-design",
+            "deep-pagination",
+            "order-limit"
+          ],
+          "practice": "在 SQL 操练场造 10 万行订单，对比 LIMIT 99980, 20 与 WHERE id > 99980 LIMIT 20 的耗时；再把写法整理进知识地图「深分页优化」页的笔记。"
+        }
+      ]
+    },
+    {
+      "id": "s5",
+      "title": "Stage 5 · 事务与并发",
+      "titleZh": "事务与并发",
+      "weeks": "第 6~7 周",
+      "goal": "理解事务如何保证数据正确：ACID、隔离级别、MVCC、锁与死锁，能写出并发安全的扣减逻辑。",
+      "hours": 10.5,
+      "items": [
+        {
+          "id": "s5-1",
+          "title": "ACID 与三种日志",
+          "goal": "能讲清 redo log、undo log、binlog 各自解决什么问题，以及两阶段提交为什么必要。",
+          "points": [
+            "原子性靠 undo log 回滚，持久性靠 redo log 刷盘，一致性由两者共同保证",
+            "binlog 是 Server 层的逻辑日志，用于主从复制与数据恢复",
+            "redo log 与 binlog 必须一致，靠两阶段提交（prepare / commit）保证"
+          ],
+          "deliverable": "一张「三种日志 → 解决什么问题 → 谁写 → 什么时候写」对照表",
+          "accept": "能解释「事务提交了但数据库宕机，数据为什么还在」以及主从复制为什么依赖 binlog",
+          "minutes": 90,
+          "level": "L3",
+          "pageIds": [
+            "acid",
+            "undo-redo-log",
+            "binlog"
+          ],
+          "practice": "在知识地图依次看「事务 ACID」「undo log 与 redo log」「binlog」三页，画三日志对照表；再到 SQL 操练场开一个事务、写数据、ROLLBACK，观察数据是否回滚。"
+        },
+        {
+          "id": "s5-2",
+          "title": "隔离级别与三种读问题",
+          "goal": "能说清脏读、不可重复读、幻读分别在哪个隔离级别出现，MySQL 默认用哪个。",
+          "points": [
+            "读未提交 → 脏读；读已提交 → 不可重复读；可重复读 → 幻读（InnoDB 用间隙锁基本规避）",
+            "MySQL 默认隔离级别是 REPEATABLE READ",
+            "隔离级别越高并发越差，业务默认值不要随意改"
+          ],
+          "deliverable": "一张「隔离级别 × 读问题」矩阵表 + 两个可复现的实验步骤",
+          "accept": "能设计一个实验演示不可重复读，并说明它在哪个级别下会消失",
+          "minutes": 90,
+          "level": "L3",
+          "pageIds": [
+            "isolation-levels",
+            "acid"
+          ],
+          "practice": "在 SQL 操练场开两个会话，把隔离级别设为 READ COMMITTED 后复现不可重复读；再改成 REPEATABLE READ 重跑同一实验，把两次结果记进矩阵表。"
+        },
+        {
+          "id": "s5-3",
+          "title": "MVCC：读为什么不用加锁",
+          "goal": "理解版本链 + Read View，能解释同一行数据为什么不同会话读到不同版本。",
+          "points": [
+            "每行有隐藏的事务 id 和回滚指针，undo log 串成版本链",
+            "Read View 决定「我能看到哪个版本」，RC 每次查询新建、RR 事务内复用",
+            "快照读走 MVCC 不加锁，当前读（FOR UPDATE）才加锁"
+          ],
+          "deliverable": "一张版本链 + Read View 的示意图，标注 RC 与 RR 的差异",
+          "accept": "能解释「为什么 RR 下第二次查询还能看到旧值」，并指出此刻 update 会看到新值",
+          "minutes": 120,
+          "level": "L4",
+          "pageIds": [
+            "mvcc",
+            "isolation-levels"
+          ],
+          "practice": "在 SQL 操练场用两个会话复现：RR 下会话 A 两次普通 SELECT 结果一致，但 SELECT ... FOR UPDATE 能看到会话 B 已提交的新值；对照知识地图「MVCC」页解释原因。"
+        },
+        {
+          "id": "s5-4",
+          "title": "锁的类型与加锁规则",
+          "goal": "分清全局锁、表锁、行锁、意向锁，知道 UPDATE 走索引与不走索引加锁范围差很多。",
+          "points": [
+            "InnoDB 行锁加在索引上，不走索引的 UPDATE 会锁住扫描到的所有行（近似表锁）",
+            "SELECT ... FOR UPDATE 是当前读 + 排他锁，SELECT ... LOCK IN SHARE MODE 是共享锁",
+            "意向锁用于表级与行级锁的冲突判断，不需要手动加"
+          ],
+          "deliverable": "一份「加锁范围实验记录」：走索引 vs 不走索引的 UPDATE 分别锁了哪些行",
+          "accept": "能解释为什么线上 UPDATE 的 WHERE 条件必须有索引，并指出漏索引会锁多少行",
+          "minutes": 120,
+          "level": "L3",
+          "pageIds": [
+            "lock-types"
+          ],
+          "practice": "在 SQL 操练场用两个会话：会话 A 执行 UPDATE ... WHERE status = 'paid'（无索引），会话 B 更新另一行，观察是否被阻塞；给 status 建索引后重跑对比。"
+        },
+        {
+          "id": "s5-5",
+          "title": "间隙锁、幻读与死锁排查",
+          "goal": "理解间隙锁锁的是「范围空隙」，会用 SHOW ENGINE INNODB STATUS 定位死锁。",
+          "points": [
+            "间隙锁（Gap Lock）锁住索引记录之间的空隙，防止其他事务插入",
+            "死锁是双方互相等对方的锁，InnoDB 会自动回滚代价小的一方",
+            "避免死锁：按固定顺序访问资源、缩短事务、减少范围更新"
+          ],
+          "deliverable": "一份死锁报告：复现一次死锁，贴出 InnoDB Status 的关键片段并说明解法",
+          "accept": "能构造出两个事务互相等待的场景，并给出至少两种避免死锁的改法",
+          "minutes": 120,
+          "level": "L4",
+          "pageIds": [
+            "gap-lock",
+            "deadlock"
+          ],
+          "practice": "在 SQL 操练场让两个会话交叉更新两行数据复现死锁，执行 SHOW ENGINE INNODB STATUS 找到 LATEST DETECTED DEADLOCK；把日志和解法写进死锁报告。"
+        },
+        {
+          "id": "s5-6",
+          "title": "乐观锁、悲观锁与长事务",
+          "goal": "能按冲突概率选乐观锁或悲观锁，知道长事务的危害与排查方式。",
+          "points": [
+            "乐观锁用版本号 / 条件更新，失败重试；悲观锁用 FOR UPDATE 串行化",
+            "库存扣减优先用「UPDATE ... WHERE stock >= n」原子扣减",
+            "长事务占住 undo log、阻塞 DDL、放大锁等待，要设事务超时并监控"
+          ],
+          "deliverable": "两段并发安全的扣减代码（乐观锁版 + 条件更新版）+ 长事务排查命令",
+          "accept": "能在 100 并发下保证库存不超卖，并说清两种写法的失败重试策略",
+          "minutes": 90,
+          "level": "L4",
+          "pageIds": [
+            "optimistic-pessimistic",
+            "transaction-pitfalls"
+          ],
+          "practice": "在 SQL 操练场用 UPDATE inventory SET stock = stock - 1 WHERE product_id = 1 AND stock >= 1; 模拟并发扣减，再改写成带版本号的乐观锁版本，对比失败重试次数。"
+        }
+      ]
+    },
+    {
+      "id": "s6",
+      "title": "Stage 6 · 架构与生产运维",
+      "titleZh": "架构与生产运维",
+      "weeks": "第 8~9 周",
+      "goal": "从单机走向生产：复制与读写分离、分库分表、备份迁移、安全与监控调优，能说清每个方案的代价。",
+      "hours": 12.5,
+      "items": [
+        {
+          "id": "s6-1",
+          "title": "主从复制原理与搭建",
+          "goal": "能讲清 binlog → relay log → 重放的复制链路，知道主从延迟从哪来。",
+          "points": [
+            "主库写 binlog，从库 IO 线程拉取写 relay log，SQL 线程重放",
+            "大事务、无主键大表、从库单线程回放都会放大延迟",
+            "复制是异步的，主库提交成功不代表从库已有数据"
+          ],
+          "deliverable": "一张复制链路图 + 三条查看复制状态（SHOW REPLICA STATUS）的关键字段说明",
+          "accept": "能解释 Seconds_Behind_Source 变大时先查哪三件事",
+          "minutes": 120,
+          "level": "L3",
+          "pageIds": [
+            "replication",
+            "binlog"
+          ],
+          "practice": "在知识地图看「主从复制原理」，画复制链路；若本机有两个实例，用 SQL 操练场执行 SHOW REPLICA STATUS\\G，对照知识页解释 Relay_Log_Pos 与 Seconds_Behind_Source。"
+        },
+        {
+          "id": "s6-2",
+          "title": "读写分离与复制延迟",
+          "goal": "知道读写分离怎么路由，能识别「刚写完读不到」的延迟问题并给出解法。",
+          "points": [
+            "写走主库、读走从库，能显著分担读压力",
+            "延迟导致刚下单查不到，需要「写后读主库」或等待位点",
+            "强一致业务（支付、库存）不要走从库"
+          ],
+          "deliverable": "一份读写分离规则表：哪些查询走主库、哪些走从库、延迟超阈值怎么降级",
+          "accept": "能针对「下单后跳转订单详情读不到」给出两种可落地的修复方案",
+          "minutes": 90,
+          "level": "L4",
+          "pageIds": [
+            "read-write-split",
+            "group-replication"
+          ],
+          "practice": "在知识地图看「读写分离与复制延迟」，写出自己项目的路由规则；再到 SQL 操练场验证：主库插入后立即在从库查（如有环境），记录延迟表现。"
+        },
+        {
+          "id": "s6-3",
+          "title": "分库分表：何时拆、怎么拆",
+          "goal": "能判断该不该拆、按什么键拆，知道分片后跨库查询与事务的代价。",
+          "points": [
+            "单表千万级、单库容量或写入到瓶颈才考虑拆，先优化索引与归档",
+            "分片键选查询最常用的维度（用户 id），避免跨片查询",
+            "分片后跨库 JOIN、分页、全局唯一 id、分布式事务都要额外方案"
+          ],
+          "deliverable": "一份分片方案：分片键、分片数、路由规则、跨片查询处理方式",
+          "accept": "能说明按 user_id 分片后「按订单号查订单」该怎么处理",
+          "minutes": 150,
+          "level": "L4",
+          "pageIds": [
+            "sharding",
+            "sharding-middleware"
+          ],
+          "practice": "在知识地图看「分库分表」和「分库分表中间件」，为订单表设计 16 片方案；再用 SQL 操练场模拟「订单号反查 user_id」的路由字段设计。"
+        },
+        {
+          "id": "s6-4",
+          "title": "备份恢复、在线迁移与 Online DDL",
+          "goal": "会做逻辑备份与恢复，知道大表加字段为什么要用 Online DDL 或 gh-ost。",
+          "points": [
+            "mysqldump 逻辑备份 + binlog 增量可恢复到任意时间点",
+            "迁移要先全量再增量追平，最后短暂停写切换",
+            "大表直接 ALTER 会锁表或打满 IO，用 Online DDL（ALGORITHM=INPLACE）或工具"
+          ],
+          "deliverable": "一份「备份 + 恢复 + 大表变更」操作手册（含命令与回滚步骤）",
+          "accept": "能设计一次不停机加索引的变更方案，并说清每一步的观察指标",
+          "minutes": 120,
+          "level": "L4",
+          "pageIds": [
+            "backup-restore",
+            "migration",
+            "online-ddl"
+          ],
+          "practice": "在 SQL 操练场用 ALTER TABLE orders ADD INDEX idx_status(status), ALGORITHM=INPLACE, LOCK=NONE; 观察执行耗时；把备份恢复命令按知识地图三页整理成手册。"
+        },
+        {
+          "id": "s6-5",
+          "title": "缓存配合与容量评估",
+          "goal": "理解 Cache Aside 的读写顺序与失效策略，会做简单的容量与扩容估算。",
+          "points": [
+            "先更新数据库再删缓存，缓存删除失败要有补偿",
+            "缓存穿透 / 击穿 / 雪崩分别用空值缓存、互斥重建、过期时间打散",
+            "容量评估看数据量 × 行大小 × 索引膨胀系数，再留 30% 余量"
+          ],
+          "deliverable": "一份缓存与数据库一致性方案 + 一张容量估算表（当前量 / 一年后 / 扩容点）",
+          "accept": "能说清「先删缓存再更新库」为什么会读到脏数据，并给出正确顺序",
+          "minutes": 90,
+          "level": "L3",
+          "pageIds": [
+            "cache-redis",
+            "capacity-planning"
+          ],
+          "practice": "在知识地图看「MySQL 与 Redis 缓存配合」，写出自己项目的读写缓存流程；再用 SQL 操练场统计当前订单表行数与平均行长，估算一年后的容量。"
+        },
+        {
+          "id": "s6-6",
+          "title": "账号权限、SQL 注入与脱敏审计",
+          "goal": "按最小权限建账号，用参数化查询消灭注入，对敏感数据脱敏并留审计。",
+          "points": [
+            "应用账号只给 SELECT/INSERT/UPDATE/DELETE，不给 DROP 与 GRANT",
+            "SQL 注入的根因是拼接字符串，参数化查询（预编译）是标准解",
+            "手机号、身份证要脱敏展示，操作日志用于事后追责"
+          ],
+          "deliverable": "一份安全基线：账号权限矩阵 + 注入防护规范 + 脱敏字段清单",
+          "accept": "能写出一个只读账号的授权语句，并指出一段拼接 SQL 的注入点与改法",
+          "minutes": 90,
+          "level": "L2",
+          "pageIds": [
+            "user-privileges",
+            "sql-injection",
+            "data-masking",
+            "audit"
+          ],
+          "practice": "在 SQL 操练场创建只读账号并授权 SELECT，再用一条构造的注入语句演示风险，然后把写法改成参数化查询；脱敏用 CONCAT(LEFT(phone,3),'****') 实测。"
+        },
+        {
+          "id": "s6-7",
+          "title": "监控、参数调优与连接池",
+          "goal": "知道该盯哪些指标（连接数 / QPS / 慢查询 / 缓冲池命中率），会调关键参数与连接池大小。",
+          "points": [
+            "Threads_connected、QPS、Slow_queries、Innodb_buffer_pool 命中率是最核心的四个指标",
+            "innodb_buffer_pool_size 通常给物理内存的 50%~70%",
+            "连接池不是越大越好：连接数超过 CPU 核数太多只会增加上下文切换"
+          ],
+          "deliverable": "一份监控指标看板清单 + 一份参数与连接池配置建议",
+          "accept": "能解释连接数打满时应用的表现，以及调大连接池为什么可能让情况更糟",
+          "minutes": 90,
+          "level": "L3",
+          "pageIds": [
+            "monitoring",
+            "config-tuning",
+            "connection-pool"
+          ],
+          "practice": "在 SQL 操练场执行 SHOW STATUS LIKE 'Threads_connected';、SHOW STATUS LIKE 'Slow_queries';、SHOW VARIABLES LIKE 'innodb_buffer_pool_size';，对照知识地图三页把指标含义写进看板清单。"
+        }
+      ]
+    },
+    {
+      "id": "s7",
+      "title": "Stage 7 · 企业实战落地",
+      "titleZh": "企业实战落地",
+      "weeks": "第 10~11 周",
+      "goal": "把前面所有知识串成完整方案：电商建模、库存防超卖、订单幂等、热点账户、报表与归档，产出可评审的交付物。",
+      "hours": 11.5,
+      "items": [
+        {
+          "id": "s7-1",
+          "title": "电商核心表设计与索引落地",
+          "goal": "设计出能支撑订单查询、对账、履约的电商核心表，并配好索引。",
+          "points": [
+            "用户、商品、订单、订单项、支付、库存的关系与基数",
+            "订单项冗余商品名与单价，作为下单快照",
+            "按高频查询（用户查订单、按状态扫单）设计联合索引"
+          ],
+          "deliverable": "一套可执行的建表 SQL（6~7 张表）+ 关系图 + 索引清单",
+          "accept": "能给出一张「表 → 主键 → 关键索引 → 支撑的查询」对照表，并解释每张表为什么这么拆",
+          "minutes": 150,
+          "level": "L4",
+          "pageIds": [
+            "ecommerce-schema",
+            "normalization",
+            "index-design"
+          ],
+          "practice": "去 Labs「电商订单库建模」实战从头做一遍，建出 users / products / orders / order_items / payments / inventory 六张表，再到知识地图「电商核心表设计」页核对冗余字段与索引。"
+        },
+        {
+          "id": "s7-2",
+          "title": "库存扣减与超卖治理",
+          "goal": "写出并发安全的库存扣减，能解释条件更新、乐观锁、悲观锁三种方案各自适用场景。",
+          "points": [
+            "原子扣减：UPDATE ... SET stock = stock - n WHERE stock >= n",
+            "扣减失败要区分「库存不足」与「并发冲突」，前者不重试、后者可重试",
+            "热点商品可拆库存行或用 Redis 预扣，再加对账兜底"
+          ],
+          "deliverable": "一段可复用的库存扣减 SQL + 一份超卖演练记录（含并发验证）",
+          "accept": "在 100 并发下库存不为负，且能说清方案在热点商品上的瓶颈",
+          "minutes": 150,
+          "level": "L4",
+          "pageIds": [
+            "inventory-oversell",
+            "optimistic-pessimistic",
+            "hot-account"
+          ],
+          "practice": "去 Labs「事务与库存防超卖」实战按步骤做并发扣减，先跑出超卖再改用条件更新修复；把两次结果和知识地图「库存扣减与超卖治理」页对照。"
+        },
+        {
+          "id": "s7-3",
+          "title": "订单幂等：唯一键与状态机",
+          "goal": "用唯一键 + 状态机保证重复请求不产生重复订单，能设计幂等令牌。",
+          "points": [
+            "客户端传幂等 token，落库唯一索引兜底，冲突时返回已有结果",
+            "状态机只允许合法流转（待支付 → 已支付 → 已发货），非法流转必须拒绝",
+            "幂等要覆盖接口重试、消息重投、用户重复点击三种场景"
+          ],
+          "deliverable": "一张订单状态机图 + 幂等实现方案（表结构 + SQL + 冲突处理）",
+          "accept": "能对同一幂等 token 连续提交 3 次，数据库只有 1 条订单且 3 次都拿到相同结果",
+          "minutes": 120,
+          "level": "L4",
+          "pageIds": [
+            "order-idempotency",
+            "unique-check-default"
+          ],
+          "practice": "去 Labs「订单幂等」实战建 orders 表唯一索引，插入同一订单号两次观察报错，再实现「冲突则查询已有订单返回」的逻辑；对照知识地图「订单幂等」页补充状态机校验。"
+        },
+        {
+          "id": "s7-4",
+          "title": "热点账户与最终一致性",
+          "goal": "会处理单行热点更新，理解本地消息表如何保证「落库 + 发消息」最终一致。",
+          "points": [
+            "热点账户用拆分多行、异步合并、或 Redis 记账再落库",
+            "本地消息表：业务写与消息写在同一事务，再由后台任务投递",
+            "最终一致要配对账与补偿，不要假设消息一定成功"
+          ],
+          "deliverable": "一套热点账户方案对比 + 本地消息表表结构与投递流程",
+          "accept": "能解释为什么「先写库再发 MQ」会丢消息，以及本地消息表怎么补上这个缺口",
+          "minutes": 120,
+          "level": "L4",
+          "pageIds": [
+            "hot-account",
+            "outbox-consistency",
+            "binlog"
+          ],
+          "practice": "去 Labs「报表与一致性」相关步骤验证本地消息表；再打开知识地图「热点账户更新」「最终一致性：本地消息表」，画一张「写库 + 写消息 + 投递 + 确认」的时序图。"
+        },
+        {
+          "id": "s7-5",
+          "title": "报表统计、多租户与冷热归档",
+          "goal": "会用窗口函数做排名与同环比，知道多租户隔离方案与冷数据归档策略。",
+          "points": [
+            "窗口函数 ROW_NUMBER / RANK / SUM() OVER 做分组排名与累计值",
+            "多租户：共享表加 tenant_id、按租户分库、或独立实例，各有成本",
+            "冷热分离：热表只留近期数据，历史数据归档到归档表或数仓"
+          ],
+          "deliverable": "一张报表 SQL 清单（日销、品类排名、用户累计消费）+ 一份归档方案",
+          "accept": "能用窗口函数写出「每个品类销售额 Top3 商品」，并说清归档后历史查询怎么满足",
+          "minutes": 150,
+          "level": "L4",
+          "pageIds": [
+            "report-queries",
+            "multi-tenant",
+            "data-archiving"
+          ],
+          "practice": "去 Labs「报表统计」实战用窗口函数写品类 Top3 与日环比；再到知识地图看「多租户数据隔离」「冷热数据归档」，给订单表设计一套按月归档方案。"
+        }
+      ]
+    }
+  ],
+  "checkpoints": [
+    {
+      "title": "能独立查数据",
+      "description": "给一张陌生表结构，10 分钟内写出正确的多表统计查询，结果能对上一个手工核算的样本。"
+    },
+    {
+      "title": "能设计一套业务表",
+      "description": "从需求出发画出 5 张以上表的关系图，字段类型、主键、唯一约束、索引都有理由，评审时经得起追问。"
+    },
+    {
+      "title": "能定位并优化一条慢查询",
+      "description": "从慢查询日志找到 SQL，用 EXPLAIN 指出是全表扫描还是回表过多，给出索引或 SQL 改写方案并验证耗时下降一个数量级。"
+    },
+    {
+      "title": "能写并发安全的扣减逻辑",
+      "description": "在并发压测下库存不超卖、余额不为负，能说清用了哪种锁、失败怎么重试、热点商品怎么处理。"
+    },
+    {
+      "title": "能设计幂等接口",
+      "description": "同一请求重复提交 3 次，库里只有一条业务数据，且每次返回一致结果；能指出唯一索引与状态机各挡了哪种重复。"
+    },
+    {
+      "title": "能讲清一次生产事故的处理",
+      "description": "面对「主从延迟导致读不到数据」「死锁导致接口超时」「大表 DDL 锁表」三类问题，能各给出 2 种以上排查与修复方案。"
+    },
+    {
+      "title": "能完成一次完整的实战交付",
+      "description": "独立完成 Labs 中的电商订单库建模 + 库存防超卖 + 订单幂等三个实战，交付建表 SQL、方案说明和检查清单。"
+    }
+  ]
+}

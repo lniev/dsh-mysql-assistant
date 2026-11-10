@@ -1,0 +1,63 @@
+{
+  "id": "capacity-planning",
+  "titleZh": "容量评估与扩容",
+  "title": "Capacity planning",
+  "chapter": "architecture",
+  "difficulty": 3,
+  "minutes": 12,
+  "summary": "容量评估就是提前算清楚「这台 MySQL 还能扛多久」：数据量涨到多大、QPS 峰值多高、连接数和磁盘 IO 什么时候到顶。像给餐厅估算翻台率：桌子（连接和 CPU）、后厨（IO）、仓库（磁盘）哪个先满，就先扩哪个。不算就直接扩容，要么浪费钱，要么在大促当天才发现瓶颈。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "餐厅一天能接待多少人，取决于每桌吃多久、有几张桌子。数据库也一样：每秒能扛多少查询，取决于单条查询多快、CPU 和磁盘能给多少。先算清楚，再决定加桌子（从库、分片）还是换后厨（换 SSD、升配）。"
+    },
+    {
+      "heading": "四个必须算的指标",
+      "text": "数据量：行数乘以平均行大小，再加上索引大小，按业务增速推演三到五年，算出磁盘需求。QPS 和 TPS 峰值：拿日常峰值乘以大促系数（通常 3 到 5 倍）。连接数：应用实例数乘以每个实例连接池大小，必须小于 max_connections 的 80%。磁盘 IOPS 和延迟：写入型业务最先撞上的往往是这一项。"
+    },
+    {
+      "heading": "先扩什么：垂直还是水平",
+      "text": "垂直扩容是升 CPU、内存、SSD，最省事但有上限，适合还没到单机瓶颈的阶段。水平扩容是加从库做读写分离、分库分表、按业务垂直拆库，复杂度高但天花板高。很多时候先加缓存和做归档，比加机器更便宜也更有效，应先穷尽这些手段。"
+    },
+    {
+      "heading": "扩容的时机",
+      "text": "几个红线：磁盘使用率超过 70%、QPS 达到压测上限的 60% 到 70%、主从延迟频繁出现、连接数经常接近上限。任何一条持续出现就该安排扩容，不要等到 100%。扩容本身也需要时间，磁盘从告警到写满可能只有几个小时。"
+    },
+    {
+      "heading": "一定要留余量",
+      "text": "主库要留 30% 到 50% 的余量，因为主库故障时从库要接住全部写流量，大促时还要顶住峰值。按季度回顾增长曲线、更新容量模型，把「什么时候扩、扩多少」提前写在计划里，而不是等报警了再临时决策。"
+    }
+  ],
+  "keyPoints": [
+    "容量看四个维度：数据量、QPS、连接数、磁盘 IO，缺一个都会误判。",
+    "大促系数按历史峰值乘 3 到 5 倍预留，别按日常流量算。",
+    "连接池总连接数不能超过 max_connections 的 80%。",
+    "先缓存、归档、读写分离，再考虑垂直或水平扩容。",
+    "主库要留余量，故障切换时从库要能接住全部流量。"
+  ],
+  "snippets": [
+    {
+      "title": "看每个库和表占多大空间",
+      "lang": "sql",
+      "code": "SELECT table_schema,\n       table_name,\n       table_rows,\n       ROUND((data_length + index_length) / 1024 / 1024, 2) AS total_mb\nFROM information_schema.tables\nWHERE table_schema NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')\nORDER BY (data_length + index_length) DESC\nLIMIT 20;"
+    },
+    {
+      "title": "看连接数与请求量",
+      "lang": "sql",
+      "code": "SHOW GLOBAL STATUS LIKE 'Threads_connected';\nSHOW GLOBAL STATUS LIKE 'Threads_running';\nSHOW GLOBAL STATUS LIKE 'Questions';\nSHOW VARIABLES LIKE 'max_connections';"
+    },
+    {
+      "title": "估算单表平均行大小",
+      "lang": "sql",
+      "code": "SELECT table_name,\n       ROUND(data_length / GREATEST(table_rows, 1), 2) AS avg_row_bytes\nFROM information_schema.tables\nWHERE table_schema = 'shop'\nORDER BY data_length DESC\nLIMIT 10;"
+    }
+  ],
+  "pitfalls": [
+    "只看数据量就决定分库分表，不看 QPS 和索引优化，拆完发现瓶颈在慢 SQL。",
+    "每个实例连接池配 100，20 个实例就是 2000 连接，超过 max_connections 直接拒绝。",
+    "磁盘用到 90% 才扩容，留给运维的时间窗口只剩几个小时。",
+    "只算日常流量，大促当天流量翻 5 倍，主从延迟和连接数一起爆。"
+  ],
+  "enterprise": "把容量模型写进季度规划：采集过去 12 个月的 QPS 和数据量增长曲线，按大促系数推演半年后的水位，提前采购或扩容。对核心库设置磁盘 70%、连接数 70%、主从延迟 1 秒三条红线告警，触发就按预案执行，而不是临时开会决定。",
+  "related": ["sharding", "read-write-split", "monitoring", "cache-redis", "replication"]
+}

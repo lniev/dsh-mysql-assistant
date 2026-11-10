@@ -1,0 +1,54 @@
+{
+  "id": "unique-check-default",
+  "titleZh": "唯一、默认值与非空约束",
+  "title": "Constraints",
+  "chapter": "table-design",
+  "difficulty": 2,
+  "minutes": 10,
+  "summary": "约束是给列设的「门规」：NOT NULL 说这列不能空着，UNIQUE 说这列不许重复，DEFAULT 说没填就按这个来，CHECK 说值必须满足条件。它们像表单的必填项和格式校验，只不过是在数据库这一层执行，所以任何写入途径都绕不过去。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "约束就是把业务规则写进表结构。代码可能漏校验、脚本可能绕过应用，但约束由数据库强制执行，脏数据进不了表。最常见的四个：NOT NULL、UNIQUE、DEFAULT、CHECK，外加主键和外键，合起来就是表设计的「防呆设计」。"
+    },
+    {
+      "heading": "UNIQUE 与 NULL 的微妙关系",
+      "text": "唯一索引允许多个 NULL，因为 NULL 表示「没有值」，MySQL 认为它们互不相等。所以给 phone 加 UNIQUE 后，多个用户仍可以都不填手机号；如果业务要求必须唯一且不能为空，就要同时写 NOT NULL + UNIQUE。"
+    },
+    {
+      "heading": "CHECK 在 8.0 才真正生效",
+      "text": "MySQL 8.0.16 之前 CHECK 只是语法，写完不检查，很多人被坑过。8.0.16 起 CHECK 真正生效，比如 CHECK (stock >= 0) 会拒绝负库存。注意表达式里不要用不确定函数，也不能引用其他列以外的表。"
+    },
+    {
+      "heading": "默认值不只是省代码",
+      "text": "DEFAULT 让插入语句不必列全所有字段，也让老数据在加新列时有合理值。但默认值要和业务语义一致：状态默认 'created'、金额默认 0.00，比默认 NULL 更省心；时间列用 CURRENT_TIMESTAMP 自动记录创建时间。"
+    }
+  ],
+  "keyPoints": [
+    "NOT NULL 让列必须有值，能减少 NULL 带来的三值逻辑麻烦。",
+    "UNIQUE 允许多个 NULL，NULL 不等于 NULL。",
+    "CHECK 在 MySQL 8.0.16 起真正生效，可用来兜底取值范围。",
+    "DEFAULT 给新列和老数据一个合理初始值。",
+    "唯一约束本质上是唯一索引，会占用索引空间并影响写入。"
+  ],
+  "snippets": [
+    {
+      "title": "把业务规则写进约束",
+      "lang": "sql",
+      "code": "CREATE TABLE inventory (\n  product_id BIGINT UNSIGNED NOT NULL,\n  stock INT NOT NULL DEFAULT 0,\n  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (product_id),\n  CONSTRAINT chk_stock CHECK (stock >= 0)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nINSERT INTO inventory (product_id, stock) VALUES (1, 10);\nUPDATE inventory SET stock = -1 WHERE product_id = 1;"
+    },
+    {
+      "title": "唯一键挡重复注册",
+      "lang": "sql",
+      "code": "CREATE TABLE users (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  phone VARCHAR(20) NOT NULL,\n  name VARCHAR(40) NOT NULL DEFAULT '',\n  PRIMARY KEY (id),\n  UNIQUE KEY uk_phone (phone)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+    }
+  ],
+  "pitfalls": [
+    "以为 UNIQUE 会把 NULL 也去重：多个 NULL 能同时存在，业务上要求唯一时还得加 NOT NULL。",
+    "给所有列都写 NOT NULL 却不给 DEFAULT：老代码 INSERT 不写这列会直接报错。",
+    "在 5.7 或 8.0.16 之前的版本依赖 CHECK：写了也不生效，等于没约束。",
+    "新增唯一索引前没清重复数据：建索引时直接失败，或者用在线工具时把主库拖慢。"
+  ],
+  "enterprise": "企业建表规范里，约束被当成「最后一道防线」：能 NOT NULL 的一律 NOT NULL 并给默认值，业务唯一字段必须有唯一索引，金额、库存这类关键列配 CHECK。迁移加约束时先在影子表验证数据，再在大表上用 Online DDL 或 gh-ost 低峰执行。",
+  "related": ["primary-key", "foreign-key", "auto-increment", "create-table", "normalization"]
+}

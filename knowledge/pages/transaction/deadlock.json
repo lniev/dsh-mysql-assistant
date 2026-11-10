@@ -1,0 +1,58 @@
+{
+  "id": "deadlock",
+  "titleZh": "死锁：成因与排查",
+  "title": "Deadlocks",
+  "chapter": "transaction",
+  "difficulty": 3,
+  "minutes": 12,
+  "summary": "死锁是两个事务各拿着一把锁、又都在等对方手里那把，谁也不松手，永远等下去。像两个人过独木桥，各走一半互相让路，结果都堵住。InnoDB 会自动检测并回滚其中一个事务，报 Deadlock found when trying to get lock；你要做的是让死锁少发生、发生了能快速定位。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "两个人各拿一半工具，都在等对方手里那半。数据库里就是：事务 A 锁了 1001 号商品等 1002，事务 B 锁了 1002 号商品等 1001，谁都不肯先放，循环等待就形成了死锁。"
+    },
+    {
+      "heading": "死锁的四个条件",
+      "text": "互斥、占有并等待、不可抢占、循环等待，四个条件同时满足才会死锁。破掉任意一个就能避免。工程上最容易破的是「循环等待」：给所有要更新的行定一个固定顺序，比如永远按主键升序更新，两个事务加锁顺序一致就不会交叉。"
+    },
+    {
+      "heading": "InnoDB 怎么处理",
+      "text": "除了等锁超时（innodb_lock_wait_timeout 默认 50 秒），InnoDB 还有死锁检测：一旦发现循环等待，会立刻回滚其中「代价较小」的事务，让另一个继续，并向客户端抛出 1213 错误。所以死锁不是数据库坏了，而是并发下的正常现象，应用必须能捕获并重试。"
+    },
+    {
+      "heading": "常见的触发场景",
+      "text": "两个事务按相反顺序更新同一批行；批量更新时 SQL 顺序不一致；唯一键冲突加上间隙锁；更新走了二级索引，加锁顺序和主键不一致；长事务占着锁再去申请新锁。几乎都能归结成「加锁顺序不一致」或「事务太长、锁范围太大」。"
+    },
+    {
+      "heading": "怎么排查",
+      "text": "执行 SHOW ENGINE INNODB STATUS，看 LATEST DETECTED DEADLOCK 段：里面有两个事务正在执行的 SQL、各自持有的锁和等待的锁。再用 performance_schema.data_lock_waits 定位当前还在等的事务。应用侧要把 SQL、参数、时间点记进日志，才能还原现场。"
+    }
+  ],
+  "keyPoints": [
+    "死锁是循环等待，InnoDB 会自动回滚一个事务，不是数据库故障。",
+    "应用必须捕获 1213 并做有限次重试，最好按主键排序后更新。",
+    "统一加锁顺序能消除大部分死锁。",
+    "死锁日志在 SHOW ENGINE INNODB STATUS 的 LATEST DETECTED DEADLOCK。",
+    "长事务和范围锁会放大死锁概率。"
+  ],
+  "snippets": [
+    {
+      "title": "两个会话按相反顺序更新（开两个窗口分别执行）",
+      "lang": "sql",
+      "code": "-- 会话 A\nSTART TRANSACTION;\nUPDATE products SET stock = stock - 1 WHERE id = 1001;\nUPDATE products SET stock = stock - 1 WHERE id = 1002;\nCOMMIT;\n\n-- 会话 B\nSTART TRANSACTION;\nUPDATE products SET stock = stock - 1 WHERE id = 1002;\nUPDATE products SET stock = stock - 1 WHERE id = 1001;\nCOMMIT;"
+    },
+    {
+      "title": "定位最近一次死锁和当前等待",
+      "lang": "sql",
+      "code": "SHOW ENGINE INNODB STATUS;\nSELECT * FROM performance_schema.data_lock_waits;"
+    }
+  ],
+  "pitfalls": [
+    "以为死锁是数据库 bug，反复重启实例；真正要改的是加锁顺序和事务长度。",
+    "捕获到 1213 直接失败不重试，或者无上限重试把数据库压得更死；应退避重试 2 到 3 次。",
+    "一个事务里更新几十张表的行且顺序不固定，死锁概率成倍上升。",
+    "用大范围 SELECT ... FOR UPDATE 再更新，间隙锁交叉最容易触发死锁。"
+  ],
+  "enterprise": "订单、库存、账务系统要统一「先按主键排序再更新」的规范，并在数据访问层封装死锁重试：捕获 1213、退避 20 到 100 毫秒、最多重试 2 到 3 次。线上采集死锁日志，出现峰值时按 LATEST DETECTED DEADLOCK 里的 SQL 反查业务代码，而不是只看监控数字。",
+  "related": ["lock-types", "gap-lock", "optimistic-pessimistic", "transaction-pitfalls", "inventory-oversell"]
+}

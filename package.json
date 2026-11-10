@@ -1,0 +1,77 @@
+{
+  "name": "@local/mysql-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MySQL 学习助手：83 个通俗知识点 + 可点击知识地图 + 学习路线 + 企业级实战 + SQL 操练场（内置电商库与自动判题）+ AI 问答（真实会话，基于内置知识库作答）。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "mysql",
+    "sql",
+    "learning",
+    "playground",
+    "knowledge-map"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0",
+    "dsh": ">=0.2.2-0"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "locale/*.json",
+    "package.json",
+    "build.mjs",
+    "src",
+    "host",
+    "knowledge",
+    "playground",
+    "scripts",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "mysql2": "^3.24.6",
+    "sql.js": "^1.13.0"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "build:data": "node scripts/build-data.mjs",
+    "prepack": "node build.mjs",
+    "validate": "node scripts/validate-content.mjs",
+    "test": "node scripts/validate-content.mjs && node scripts/build-data.mjs && node build.mjs && node scripts/smoke.mjs && node scripts/host-api.test.mjs && node scripts/sql-runtime.test.mjs && node scripts/mysql-runtime.test.mjs && node scripts/ui-smoke.test.mjs",
+    "test:host": "node scripts/host-api.test.mjs",
+    "test:sql": "node scripts/sql-runtime.test.mjs",
+    "test:ui": "node scripts/ui-smoke.test.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

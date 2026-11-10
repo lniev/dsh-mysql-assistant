@@ -1,0 +1,68 @@
+{
+  "id": "distinct",
+  "titleZh": "DISTINCT：去重",
+  "title": "DISTINCT",
+  "chapter": "sql-basics",
+  "difficulty": 1,
+  "minutes": 8,
+  "summary": "DISTINCT 是「同一款衣服只挂一件样衣」：把结果里完全重复的行合并成一行。它管的是整行组合，不是某一列——SELECT DISTINCT city 是去重城市，SELECT DISTINCT city, status 是去重「城市 + 状态」组合。",
+  "sections": [
+    {
+      "heading": "一句话理解：对结果集去重",
+      "text": "DISTINCT 写在 SELECT 后面，作用范围是它后面所有列的组合。SELECT DISTINCT city FROM users 返回不重复的城市；SELECT DISTINCT city, status FROM users 返回不重复的「城市 + 状态」组合，只有两列都相同才算重复。"
+    },
+    {
+      "heading": "它内部怎么执行",
+      "text": "去重通常要先建临时表或排序，把重复行丢掉，所以有额外开销。结果集很大时，临时表可能落到磁盘，速度明显下降。数据量小的时候无所谓，几百万行结果再 DISTINCT，往往就是慢查询的直接原因。"
+    },
+    {
+      "heading": "和 COUNT(DISTINCT) 配合",
+      "text": "统计「有多少个不同用户下单」用 COUNT(DISTINCT user_id)，它只数非 NULL 的值。但 COUNT(DISTINCT) 在大表上很贵，高频统计要考虑预聚合表或近似去重方案，别每次都现算。"
+    },
+    {
+      "heading": "什么时候别用 DISTINCT",
+      "text": "想要「每个用户最新一单」，用窗口函数 ROW_NUMBER()，不要 DISTINCT 硬凑；想去掉重复再取一条，用 GROUP BY 语义更清楚；DISTINCT * 几乎等于整表去重，既慢又没意义。"
+    },
+    {
+      "heading": "去重的前提是值真的一样",
+      "text": "DISTINCT 只按值比较，'北京' 和 '北京 '（带空格）可能被当成两个值，'Apple' 和 'apple' 在对应排序规则下也可能相同或不同。数据脏的时候，先去空格、统一大小写，再去重，否则结果里还会出现「看起来一样」的两行。"
+    }
+  ],
+  "keyPoints": [
+    "DISTINCT 作用于 SELECT 后所有列的组合，不是只对第一列生效。",
+    "COUNT(DISTINCT 列) 只统计非 NULL 的不同值。",
+    "DISTINCT 通常要临时表或排序，结果集大就慢。",
+    "要「每组取最新一条」用窗口函数，不要 DISTINCT 硬凑。",
+    "DISTINCT * 基本等于整表去重，既慢又没意义。",
+    "去重前先处理空格、大小写等脏数据，否则等于没去。"
+  ],
+  "snippets": [
+    {
+      "title": "城市去重",
+      "lang": "sql",
+      "code": "SELECT DISTINCT city FROM users;"
+    },
+    {
+      "title": "统计有多少不同用户下过单",
+      "lang": "sql",
+      "code": "SELECT COUNT(DISTINCT user_id) AS buyer_cnt\nFROM orders\nWHERE status = 'paid';"
+    },
+    {
+      "title": "每个用户最新一单：用窗口函数更合适",
+      "lang": "sql",
+      "code": "SELECT id, user_id, total_amount, created_at\nFROM (\n  SELECT id, user_id, total_amount, created_at,\n         ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) AS rn\n  FROM orders\n) t\nWHERE rn = 1;"
+    }
+  ],
+  "pitfalls": [
+    "SELECT DISTINCT city, status 以为只去重城市：其实是组合去重，结果会有多行。",
+    "DISTINCT 配 ORDER BY 却用了未在 SELECT 里的列：8.0 会报错或结果不符合预期。",
+    "以为 DISTINCT 能去掉「看起来一样」的数据：大小写、首尾空格、全角半角都可能没去干净。",
+    "在大结果集上 DISTINCT 再做分页：每次都要重新去重排序，越翻越慢。"
+  ],
+  "enterprise": "营销报表的「去重口径」要写清楚：按用户、按设备还是按订单。UV 类统计优先用预聚合表或近似算法，别在大表上现跑 COUNT(DISTINCT)；列表去重前先统一数据格式，避免脏数据让报表数字忽高忽低。",
+  "related": [
+    "group-by",
+    "aggregate-functions",
+    "join-inner"
+  ]
+}

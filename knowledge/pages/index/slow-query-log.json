@@ -1,0 +1,59 @@
+{
+  "id": "slow-query-log",
+  "titleZh": "慢查询日志与定位",
+  "title": "Slow query log",
+  "chapter": "index",
+  "difficulty": 2,
+  "minutes": 12,
+  "summary": "慢查询日志就像数据库的行车记录仪：平时不显眼，一出问题就能回放「哪条 SQL 跑了几秒、扫了多少行」。它把执行时间超过阈值的语句记下来，你能从几千条 SQL 里精准捞出那几条拖慢整个库的「罪魁祸首」，而不是靠猜。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "开启慢查询日志（slow_query_log）并设置阈值 long_query_time（单位秒，支持小数），MySQL 就会把超过阈值的语句写进日志，附带耗时、锁时间、扫描行数、返回行数。有了它，优化就从「凭感觉」变成「按证据」。"
+    },
+    {
+      "heading": "怎么打开",
+      "text": "线上一般改配置文件 my.cnf 并重启，或临时 SET GLOBAL 在线打开（重启失效）。除了 total 耗时，还可以开 log_queries_not_using_indexes 记录没走索引的语句，但生产库要谨慎，因为这类语句可能非常多，日志会迅速膨胀。"
+    },
+    {
+      "heading": "日志里看什么",
+      "text": "重点看三样：Query_time（总耗时）、Rows_examined（扫描行数）、Rows_sent（返回行数）。扫描 100 万行只返回 10 行，说明索引有问题；扫描行数远超返回行数，就值得拉出来 EXPLAIN 看一眼。日志本身不直接告诉你原因，它负责「筛出嫌疑人」。"
+    },
+    {
+      "heading": "批量分析用工具",
+      "text": "日志文件直接看很痛苦，常用 pt-query-digest 汇总成「按总耗时排序的 SQL 榜」，或者查 performance_schema.events_statements_summary_by_digest 按 digest 聚合。优化顺序通常是：先修总耗时最高的、出现次数最多的，收益最大。"
+    }
+  ],
+  "keyPoints": [
+    "slow_query_log + long_query_time 控制是否记录和阈值。",
+    "日志记录 Query_time、Rows_examined、Rows_sent，先看扫描行数。",
+    "生产临时开启用 SET GLOBAL，改配置文件才能持久。",
+    "pt-query-digest 或 performance_schema 按 SQL 摘要聚合排名。",
+    "按「总耗时 × 调用次数」排序，优先优化收益最大的那几条。"
+  ],
+  "snippets": [
+    {
+      "title": "在线开启慢查询日志",
+      "lang": "sql",
+      "code": "SET GLOBAL slow_query_log = 'ON';\nSET GLOBAL long_query_time = 1;\nSET GLOBAL log_output = 'FILE';\n\nSHOW VARIABLES LIKE 'slow_query_log%';\nSHOW VARIABLES LIKE 'long_query_time';"
+    },
+    {
+      "title": "从 performance_schema 找最耗时的 SQL",
+      "lang": "sql",
+      "code": "SELECT digest_text,\n       count_star AS exec_count,\n       ROUND(sum_timer_wait / 1e12, 2) AS total_sec,\n       ROUND(avg_timer_wait / 1e12, 4) AS avg_sec,\n       sum_rows_examined AS rows_examined\nFROM performance_schema.events_statements_summary_by_digest\nORDER BY sum_timer_wait DESC\nLIMIT 10;"
+    },
+    {
+      "title": "把慢日志写进表里方便查询",
+      "lang": "sql",
+      "code": "SET GLOBAL log_output = 'TABLE';\n\nSELECT start_time, query_time, lock_time, rows_examined, rows_sent, sql_text\nFROM mysql.slow_log\nORDER BY start_time DESC\nLIMIT 20;"
+    }
+  ],
+  "pitfalls": [
+    "只把 long_query_time 改成 1 就以为万事大吉：很多慢查询来自执行频繁的小 SQL，按总耗时排序才看得出。",
+    "生产打开 log_queries_not_using_indexes：没索引的语句可能每秒上千条，日志写满磁盘。",
+    "用 SET GLOBAL 改完不写配置文件：数据库一重启设置就丢，下次故障又没日志。",
+    "只看 Query_time 不看 Rows_examined / Rows_sent：扫描百万行返回十行，可能被误判成「只是慢」。"
+  ],
+  "enterprise": "企业通常把慢查询日志接入监控平台，按小时聚合 Top SQL 并设阈值告警；DBA 每周复盘新增的慢 SQL，推动加索引或改代码。对核心库还会开启审计和 performance_schema 采样，避免只靠日志漏掉「快但调用量巨大」的 SQL。",
+  "related": ["explain", "optimizer-stats", "index-failure", "monitoring", "index-design"]
+}

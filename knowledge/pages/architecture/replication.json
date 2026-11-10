@@ -1,0 +1,63 @@
+{
+  "id": "replication",
+  "titleZh": "主从复制原理",
+  "title": "Replication",
+  "chapter": "architecture",
+  "difficulty": 3,
+  "minutes": 18,
+  "summary": "主从复制就是「主库记账，从库抄账」：主库把变更写进 binlog，从库的 IO 线程把日志拉回去，SQL 线程照着重放，于是从库有了和主库几乎一样的数据。它带来三样好处：读请求可以分摊到从库、主库挂了能切换、还能在从库做备份。代价是延迟和一致性要自己想清楚。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "店长在总店记营业流水（主库写 binlog），分店每天派人把流水抄回去照做一遍（从库重放 relay log）。只要抄得够快，两家店的账就能对上；抄得慢，就会看到「总店已经卖了、分店账上还没有」。"
+    },
+    {
+      "heading": "复制的三步流水线",
+      "text": "主库提交事务时写 binlog。从库的 IO 线程连到主库，把 binlog 拉回本地写成 relay log（中继日志）。从库的 SQL 线程再读 relay log 逐条重放。为了知道抄到哪了，用日志文件名加位置，或者用 GTID（全局事务编号）记录进度。"
+    },
+    {
+      "heading": "异步、半同步、组复制",
+      "text": "默认是异步复制：主库提交后不等从库，速度最快，但主库突然宕机可能丢掉还没传过去的事务。半同步复制要求至少一个从库确认收到并落盘，主库才返回成功，能减少丢数据，代价是每次提交多等一个网络往返。组复制（MGR）再进一步，用多数派投票决定提交。"
+    },
+    {
+      "heading": "延迟从哪来",
+      "text": "从库重放默认是单线程（5.7 之后可以基于组提交、主键做并行重放）。大事务、没有主键的表、大批量 DDL、从库机器性能差，都会让从库追不上。seconds_behind_source 大于 0 就说明有延迟，大促期间最容易出现。"
+    },
+    {
+      "heading": "要盯的指标和纪律",
+      "text": "监控复制线程状态、Seconds_Behind_Source、relay log 堆积量和 GTID 差距；从库必须设置 read_only 加 super_read_only，防止人误写破坏复制。主从切换前一定要确认从库已经重放完（延迟为 0 或 GTID 一致），否则切过去就丢了最后几秒的数据。"
+    }
+  ],
+  "keyPoints": [
+    "复制等于主库写 binlog、从库拉 relay log、SQL 线程重放，默认异步。",
+    "从库用 read_only 加 super_read_only 防止误写。",
+    "半同步能减少主库宕机丢数据，但会增加提交延迟。",
+    "大事务和无主键表是复制延迟的两大元凶。",
+    "切换前必须确认从库追平，否则会丢数据。"
+  ],
+  "snippets": [
+    {
+      "title": "在从库上查看复制状态",
+      "lang": "sql",
+      "code": "SHOW REPLICA STATUS;\nSELECT * FROM performance_schema.replication_connection_status;"
+    },
+    {
+      "title": "配置从库指向主库（MySQL 8.0.23 起）",
+      "lang": "sql",
+      "code": "CHANGE REPLICATION SOURCE TO\n  SOURCE_HOST = '10.0.0.11',\n  SOURCE_PORT = 3306,\n  SOURCE_USER = 'repl',\n  SOURCE_PASSWORD = 'Repl_2026#',\n  SOURCE_AUTO_POSITION = 1;\nSTART REPLICA;\nSHOW REPLICA STATUS;"
+    },
+    {
+      "title": "在主库上确认 binlog 位点",
+      "lang": "sql",
+      "code": "SHOW MASTER STATUS;  -- 8.0 仍可用，8.4 起改名为 SHOW BINARY LOG STATUS"
+    }
+  ],
+  "pitfalls": [
+    "在从库上直接写业务数据，复制立刻报 1032 或 1062 错误，以为复制坏了。",
+    "业务表没有主键，ROW 格式重放时从库要全表扫描，延迟越拉越大。",
+    "不监控 Seconds_Behind_Source，大促时用户读到几分钟前的旧数据。",
+    "主库宕机后直接切到还没追平的从库，丢了最后几秒的订单。"
+  ],
+  "enterprise": "标准做法是一主两从：一个从库承担读流量，一个从库专门做备份和离线抽取，互相不影响。上线前统一「所有业务表必须有主键」，大事务拆小，监控复制延迟并对延迟超阈值的从库自动摘除读流量。云上可以直接用托管的高可用版省掉这些运维细节。",
+  "related": ["read-write-split", "binlog", "group-replication", "backup-restore", "migration"]
+}

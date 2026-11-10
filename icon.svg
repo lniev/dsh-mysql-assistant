@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2B95FF"/>
+      <stop offset="0.55" stop-color="#0A84FF"/>
+      <stop offset="1" stop-color="#0058B0"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="40" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <rect width="64" height="40" rx="14" fill="url(#shine)"/>
+  <!-- graduation cap -->
+  <path d="M32 12.5 54 22.4 32 32.3 10 22.4Z" fill="#FFFFFF"/>
+  <path d="M54 22.4v7.6" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="54" cy="32.6" r="2.8" fill="#FFFFFF"/>
+  <!-- database cylinder -->
+  <ellipse cx="32" cy="42" rx="14" ry="4.9" stroke="#FFFFFF" stroke-width="3.2"/>
+  <path d="M18 42v9c0 2.9 6.3 5 14 5s14-2.1 14-5v-9" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M18 46.4c0 2.7 6.3 4.9 14 4.9s14-2.2 14-4.9" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" opacity="0.92"/>
+</svg>

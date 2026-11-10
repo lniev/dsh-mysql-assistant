@@ -1,0 +1,70 @@
+{
+  "id": "inventory-oversell",
+  "titleZh": "库存扣减与超卖治理",
+  "title": "Inventory oversell",
+  "chapter": "enterprise",
+  "difficulty": 4,
+  "minutes": 20,
+  "summary": "超卖就是同一件商品卖给了两个买家：仓库只有 100 件，订单却卖出去了 120 件。原因通常不是库存算错，而是「先查库存、再判断、再扣减」这三步不是原子的——两个请求同时查到还剩 1 件，于是都成功了。解决办法只有一个：把判断和扣减压进同一条 UPDATE。",
+  "sections": [
+    {
+      "heading": "先看事故现场",
+      "text": "大促时商品页显示有货，用户下单成功，仓库却发不出货。查日志发现两个请求几乎同时读到 stock = 1，都判断「够」，然后各自扣减，库存变成 0 和 -1。结果就是用户投诉、赔付、差评，运营还得紧急下架商品。"
+    },
+    {
+      "heading": "为什么会超卖",
+      "text": "应用层常见写法：先 SELECT stock 出来判断大于 0，再 UPDATE 扣减。三步之间没有任何保护，并发下两个线程都能通过判断。这不是 MySQL 的问题，是业务逻辑非原子。事务也救不了——两个事务读的是同一份快照，除非加锁或把条件写进更新语句。"
+    },
+    {
+      "heading": "方案一：一条 UPDATE 原子扣减",
+      "text": "把条件写进 UPDATE：SET stock = stock - n WHERE product_id = 501 AND stock >= n。InnoDB 会对这一行加锁，判断和减一起完成；受影响行数为 0 就代表库存不足，应用回滚并提示。这是最常见也最可靠的方案，一条 SQL 解决并发问题。"
+    },
+    {
+      "heading": "方案二：乐观锁和悲观锁",
+      "text": "乐观锁给表加 version 列，UPDATE 时 WHERE version = 旧值，冲突就重试，适合冲突少的场景；悲观锁用 SELECT ... FOR UPDATE 先把行锁住再操作，适合需要读出来做复杂计算的场景，但并发高时排队明显。热点商品优先用原子 UPDATE。"
+    },
+    {
+      "heading": "方案三：预扣和兜底",
+      "text": "大促把库存预热到 Redis 做第一道过滤，DB 只承接少量请求；或者用「预占」：下单锁库存，超时未支付自动释放；再加库存流水表和唯一约束兜底。注意缓存和 DB 的一致性——Redis 卖完了 DB 还在卖是另一种事故。"
+    }
+  ],
+  "keyPoints": [
+    "判断库存和扣减必须写进同一条 UPDATE，靠 WHERE stock >= n 原子完成。",
+    "受影响行数为 0 就代表扣减失败，应用要回滚并提示库存不足。",
+    "一次扣多个商品时按 product_id 排序执行，避免交叉加锁死锁。",
+    "乐观锁适合冲突少的场景，悲观锁适合冲突多但事务短的场景。",
+    "Redis 预扣只是削峰，DB 的原子扣减仍然是最后防线。",
+    "库存流水（每次变动一行）比只看最终库存值更可靠，方便对账和回滚。"
+  ],
+  "snippets": [
+    {
+      "title": "原子扣减：判断和扣在一条语句里",
+      "lang": "sql",
+      "code": "UPDATE inventory\nSET stock = stock - 2, updated_at = NOW()\nWHERE product_id = 501 AND stock >= 2;\nSELECT ROW_COUNT() AS affected_rows;"
+    },
+    {
+      "title": "事务里扣减并建单，按影响行数决定提交还是回滚",
+      "lang": "sql",
+      "code": "START TRANSACTION;\nUPDATE inventory SET stock = stock - 1, updated_at = NOW()\nWHERE product_id = 501 AND stock >= 1;\nSET @affected = ROW_COUNT();\nINSERT INTO order_items (order_id, product_id, unit_price, quantity)\nVALUES (9001, 501, 199.00, 1);\nCOMMIT;\nSELECT @affected AS affected_rows;"
+    },
+    {
+      "title": "乐观锁扣减（假设 inventory 表增加了 version 列）",
+      "lang": "sql",
+      "code": "UPDATE inventory\nSET stock = stock - 1, version = version + 1\nWHERE product_id = 501 AND version = 12 AND stock >= 1;"
+    }
+  ],
+  "pitfalls": [
+    "先 SELECT 判断再 UPDATE：两条语句之间并发请求插进来，100 件能卖 120 件，必须用 UPDATE 加 stock >= n 一步完成。",
+    "扣库存不带 stock >= n 条件：库存扣成负数才发现，补数据比重写下单还麻烦。",
+    "多商品订单按购物车顺序扣减：A 等 B、B 等 A 交叉等待，直接死锁，要按 product_id 固定顺序扣。",
+    "用 Redis 预扣后不同步 DB：缓存说没货、DB 还有货，或者反过来，最后只能人工盘点。"
+  ],
+  "enterprise": "大促前把库存预热到缓存，DB 用原子 UPDATE 兜底；下单成功立即写库存流水，方便对账和回滚；超时未支付要有释放库存的任务；多商品扣减按 product_id 排序；监控「库存为 0 但仍有下单请求」的商品提前预警。促销限购在应用层和唯一约束两层一起做。",
+  "related": [
+    "ecommerce-schema",
+    "hot-account",
+    "deadlock",
+    "optimistic-pessimistic",
+    "acid"
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "id": "acid",
+  "titleZh": "事务 ACID：转账为什么不出错",
+  "title": "ACID",
+  "chapter": "transaction",
+  "difficulty": 2,
+  "minutes": 15,
+  "summary": "事务就像银行转账：扣钱和加钱必须当成一件事，要么都成、要么都不做。ACID 是给这件事定的四个保证——原子性、一致性、隔离性、持久性。少了任何一个，你就会看到「钱扣了对方没收到」「两个人同时改成同一行」「机器断电刚提交的订单没了」这些事故。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "把一次转账想成柜员手里的一个不可拆封包裹：要么整包办完，要么原样退回，中间绝不允许你拿走半成品。ACID 就是给这个包裹定的四条规矩，InnoDB 负责执行；规矩守住了，你才敢把「扣钱」和「加钱」交给数据库自己处理。"
+    },
+    {
+      "heading": "没有 ACID 会出什么事",
+      "text": "扣款成功了、加款那一步数据库崩了，钱就凭空消失；两个人同时抢最后一件库存，各自读到还剩 1 件，都扣成 0，结果卖出两件，这就是超卖。ACID 的存在就是为了让这些「半成功」不可能发生。"
+    },
+    {
+      "heading": "四个字母各管什么",
+      "text": "A 原子性：回滚靠 undo log，撤销做了一半的改动。C 一致性：数据要满足约束和业务规则，数据库能守住唯一键、外键、非空，业务规则还得应用自己保证。I 隔离性：并发事务互相不看见对方的中间状态，靠锁和 MVCC。D 持久性：提交了就不能丢，靠 redo log 落盘。"
+    },
+    {
+      "heading": "四个保证不是并列的",
+      "text": "隔离性和性能是跷跷板：隔离越强，并发越差。原子性和持久性由 InnoDB 直接兜底，一致性其实是「业务期望」，数据库只能帮你守住一部分。所以写事务时先问自己：这条业务规则，数据库约束能管住吗？管不住的就要靠事务里的条件判断和校验。"
+    },
+    {
+      "heading": "怎么写一个正确的事务",
+      "text": "做法很固定：START TRANSACTION 开启；用带条件的 SQL 一次完成判断和写入（例如库存仍然充足才扣）；确认影响行数符合预期；COMMIT 提交，任何一步不对就 ROLLBACK。整个过程要短，别在事务里调用第三方接口或者等用户操作。"
+    }
+  ],
+  "keyPoints": [
+    "原子性靠 undo log 回滚，持久性靠 redo log 落盘，隔离性靠锁和 MVCC。",
+    "一致性是业务期望：数据库守约束，业务逻辑要自己写对。",
+    "事务必须短：不要在里面做 RPC、发消息、等用户输入。",
+    "提交前再校验一次条件（例如库存仍然够），别只信刚开始读到的值。",
+    "MySQL 默认每条语句自动提交，要整体成功必须显式 START TRANSACTION。"
+  ],
+  "snippets": [
+    {
+      "title": "一笔转账必须放在同一个事务里",
+      "lang": "sql",
+      "code": "-- 假设 users 表有 balance 字段，金额用 DECIMAL(12,2)\nSTART TRANSACTION;\nSELECT balance FROM users WHERE id = 1 FOR UPDATE;\nUPDATE users SET balance = balance - 100.00 WHERE id = 1 AND balance >= 100.00;\nUPDATE users SET balance = balance + 100.00 WHERE id = 2;\nCOMMIT;"
+    },
+    {
+      "title": "任何一步不符合预期就整体回滚",
+      "lang": "sql",
+      "code": "START TRANSACTION;\nUPDATE products SET stock = stock - 1 WHERE id = 1001 AND stock >= 1;\nSELECT ROW_COUNT();\nUPDATE orders SET status = 'paid' WHERE id = 90001;\n-- 若 ROW_COUNT() 为 0（库存不足），应用层直接回滚\nROLLBACK;"
+    }
+  ],
+  "pitfalls": [
+    "以为开了事务就自动防超卖：没有行锁或条件校验，两个事务照样都会成功。",
+    "在事务里调用支付接口、发消息或等用户输入，锁被持有好几秒，后面全在排队。",
+    "只有一部分语句放进事务（比如扣库存不在事务内），出问题时数据半对半错。",
+    "autocommit=1 时每条语句自成一个事务，误以为一长串更新能一起回滚。"
+  ],
+  "enterprise": "支付、库存、账务这类写操作必须成组进出事务，并遵循「短事务」：远程调用、消息发送、第三方回调都放到事务外，用本地消息表和定时对账补一致性。线上还会定期检查 innodb_trx 里运行超过几秒的事务，超过阈值就找业务方改。",
+  "related": ["isolation-levels", "undo-redo-log", "inventory-oversell", "transaction-pitfalls", "optimistic-pessimistic"]
+}

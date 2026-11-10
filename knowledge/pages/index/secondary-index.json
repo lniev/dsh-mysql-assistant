@@ -1,0 +1,54 @@
+{
+  "id": "secondary-index",
+  "titleZh": "二级索引与回表",
+  "title": "Secondary index & lookups",
+  "chapter": "index",
+  "difficulty": 3,
+  "minutes": 15,
+  "summary": "二级索引是书末的「关键词索引」：它单独按某个字段排序，和正文（聚簇索引）不是一回事。查 city = '杭州' 时，MySQL 先在关键词索引里找到对应记录，拿到主键，再回聚簇索引里把整行翻出来——这个「查完目录再去书架翻书」的动作，就叫回表。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "除了主键索引，其他索引都是二级索引（也叫辅助索引）。它的叶子节点不存整行，只存「索引列的值 + 主键值」。所以通过二级索引查数据要两步：先在二级索引里找到主键，再用主键回聚簇索引取整行，这两步就是回表。"
+    },
+    {
+      "heading": "为什么要回表",
+      "text": "因为整行数据只存在聚簇索引的叶子上，二级索引里没有 name、total_amount 这些列。如果查询只要索引列和主键，就不用回表；如果要其他列，就必须拿着主键再去聚簇索引找一次。回表次数多，就是二级索引查询慢的主要原因。"
+    },
+    {
+      "heading": "回表多了会怎样",
+      "text": "假设 city = '杭州' 命中 5 万行，就要回表 5 万次，每次都是一次随机 IO。优化器发现「命中行数占比太高」时，可能干脆放弃索引直接全表扫描。所以低选择性字段（性别、状态）建索引经常没效果，联合索引和高选择性字段才更值得。"
+    },
+    {
+      "heading": "怎么减少回表",
+      "text": "最有效的办法是让查询用上覆盖索引：把 SELECT 需要的列都放进索引，就不用回表。其次通过联合索引一次命中多个条件，减少命中的行数。写 SQL 时尽量只取真正要用的列，别动不动 SELECT *，否则覆盖索引也用不上。"
+    }
+  ],
+  "keyPoints": [
+    "除主键外的索引都是二级索引，叶子节点存「索引列 + 主键值」。",
+    "通过二级索引查非索引列需要「回表」，即再查一次聚簇索引。",
+    "回表是随机 IO，命中行数越多越慢，低选择性列建索引效果差。",
+    "把查询列放进索引即可避免回表，这就是覆盖索引。",
+    "SELECT * 最容易破坏覆盖索引，只查需要的列。"
+  ],
+  "snippets": [
+    {
+      "title": "先建二级索引，再观察回表",
+      "lang": "sql",
+      "code": "ALTER TABLE users ADD INDEX idx_city (city);\n\nEXPLAIN SELECT id, name, phone\nFROM users\nWHERE city = '杭州';\n\nEXPLAIN SELECT id\nFROM users\nWHERE city = '杭州';"
+    },
+    {
+      "title": "联合索引减少命中行数",
+      "lang": "sql",
+      "code": "ALTER TABLE orders ADD INDEX idx_user_status (user_id, status);\n\nEXPLAIN SELECT id, total_amount\nFROM orders\nWHERE user_id = 1001 AND status = 'paid';"
+    }
+  ],
+  "pitfalls": [
+    "以为建了索引就不回表：只有索引里包含所有要查的列，才不用回表。",
+    "写 SELECT * 让覆盖索引失效：明明能走索引的查询，变成大量回表甚至全表扫描。",
+    "在只有几种取值的列上建索引：命中行太多，回表成本可能超过全表扫描。",
+    "以为回表是「多一次逻辑操作」：它是一次真实的随机磁盘/内存页查找，百万行回表非常可观。"
+  ],
+  "enterprise": "企业优化索引时通常先看「查询列能不能被联合索引覆盖」，列表页、详情页尤其明显。对回表严重的查询，常见做法是加联合索引把常用列包进去，或者用冗余字段换覆盖索引；同时禁止 SELECT *，并在评审中检查查询列与索引列是否匹配。",
+  "related": ["clustered-index", "covering-index", "composite-index", "explain", "index-concept"]
+}

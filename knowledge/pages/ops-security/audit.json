@@ -1,0 +1,70 @@
+{
+  "id": "audit",
+  "titleZh": "审计日志",
+  "title": "Audit logs",
+  "chapter": "ops-security",
+  "difficulty": 2,
+  "minutes": 10,
+  "summary": "审计日志就是数据库的「监控录像」：谁、从哪台机器、在什么时间、执行了什么语句、改了哪些数据。平时看着多余，可一旦出现「这张表的数据怎么没了」「客户的信息被谁改了」，它就是唯一能还原现场的东西。合规检查也离不开它。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "业务代码里的日志记的是「用户做了什么」，审计日志记的是「数据库这一层发生了什么」。两者都要有，因为总有人会绕过应用直接连库改数据，而这种情况只有数据库层的日志能看见。"
+    },
+    {
+      "heading": "审计要记哪些事",
+      "text": "登录与失败登录、DDL（建表删表改表）、敏感表的增删改、权限变更（GRANT/REVOKE）。每条至少带账号、来源 IP、时间、语句、影响行数。只记查询太吵，只记变更又查不到「谁看过数据」，按合规要求取舍。"
+    },
+    {
+      "heading": "社区版能用的手段",
+      "text": "general_log 记录所有语句，开销大，只适合短时间排查；slow_log 记慢查询；binlog 记录所有数据变更，能追查也能恢复；敏感表可以加触发器，把变更前后值写进审计表；performance_schema 里有最近的语句历史。"
+    },
+    {
+      "heading": "审计表怎么设计",
+      "text": "一行一条变更：表名、主键值、动作、变更前后值（JSON）、操作账号、时间，按时间分区或按月分表并定期归档。审计表单独放库、单独授权，业务账号只能写不能改删，否则改完数据顺手就能把证据抹掉。"
+    },
+    {
+      "heading": "成本和边界",
+      "text": "general_log 全开会明显拖慢吞吐、很快写满磁盘，只在排障窗口临时打开。审计数据量很大，建议按「敏感表触发器 + binlog 长期归档 + 日志平台」组合，而不是所有语句都落表；审计系统本身也要防篡改。"
+    }
+  ],
+  "keyPoints": [
+    "审计日志要能回答：谁、什么时候、从哪、改了什么、改前改后是什么。",
+    "general_log 开销大，只在排查窗口临时开。",
+    "binlog 能追查数据变更，但不记录执行账号，要配合其他手段。",
+    "敏感表用触发器把变更前后值写进独立审计表。",
+    "审计表单独授权，业务账号只能写不能改删。",
+    "合规场景审计日志通常要求保留 6 个月以上。"
+  ],
+  "snippets": [
+    {
+      "title": "临时开启 general_log 排查问题",
+      "lang": "sql",
+      "code": "SET GLOBAL log_output = 'TABLE';\nSET GLOBAL general_log = ON;\nSELECT event_time, user_host, argument\nFROM mysql.general_log\nWHERE argument LIKE '%UPDATE orders%'\nORDER BY event_time DESC\nLIMIT 20;\nSET GLOBAL general_log = OFF;"
+    },
+    {
+      "title": "用触发器记录敏感表变更",
+      "lang": "sql",
+      "code": "CREATE TABLE audit_user_change (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  user_id BIGINT UNSIGNED NOT NULL,\n  action VARCHAR(16) NOT NULL,\n  old_city VARCHAR(64),\n  new_city VARCHAR(64),\n  changed_by VARCHAR(128) NOT NULL,\n  changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id),\n  KEY idx_user_time (user_id, changed_at)\n) ENGINE = InnoDB;\nDELIMITER $$\nCREATE TRIGGER trg_users_au AFTER UPDATE ON users\nFOR EACH ROW\nBEGIN\n  INSERT INTO audit_user_change (user_id, action, old_city, new_city, changed_by)\n  VALUES (OLD.id, 'update', OLD.city, NEW.city, CURRENT_USER());\nEND$$\nDELIMITER ;"
+    },
+    {
+      "title": "从 performance_schema 看最近执行过的语句",
+      "lang": "sql",
+      "code": "SELECT THREAD_ID, EVENT_NAME, SQL_TEXT, TIMER_WAIT\nFROM performance_schema.events_statements_history\nWHERE SQL_TEXT IS NOT NULL\nORDER BY TIMER_START DESC\nLIMIT 10;"
+    }
+  ],
+  "pitfalls": [
+    "一直开着 general_log：磁盘很快写满、吞吐明显下降，只在排查窗口临时开，查完就关。",
+    "审计表建在业务库，业务账号有 DELETE 权限：改完数据顺手把审计也删了，审计表要独立库、独立权限。",
+    "只依赖 binlog：binlog 默认不记录执行账号，查不到「是谁改的」，要配合 general_log 或中间件审计。",
+    "binlog 只保留 3 天：真出问题时早被清理了，按合规要求设置 expire_logs_days 并异地归档。"
+  ],
+  "enterprise": "金融、医疗类业务按等保要求，审计日志一般至少保留 6 个月。生产常用组合：敏感表触发器审计 + binlog 长期归档 + 定期同步到日志平台；权限变更单独告警；审计数据只读，运维也无法删除。每次事故复盘都要能拿出完整的操作链路。",
+  "related": [
+    "user-privileges",
+    "monitoring",
+    "binlog",
+    "data-masking",
+    "sql-injection"
+  ]
+}

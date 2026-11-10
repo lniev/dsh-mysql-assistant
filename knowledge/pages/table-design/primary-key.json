@@ -1,0 +1,54 @@
+{
+  "id": "primary-key",
+  "titleZh": "主键：每行数据的身份证",
+  "title": "Primary keys",
+  "chapter": "table-design",
+  "difficulty": 2,
+  "minutes": 12,
+  "summary": "主键就是每行数据的身份证号：它必须非空、唯一，数据库靠它精确定位某一行。比如用户表用 id 做主键，删一个用户、改一个订单，都是靠主键找到那一行。没有主键的表就像没有编号的档案柜，想抽出一份文件只能全柜翻一遍。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "主键（PRIMARY KEY）是一个特殊的唯一索引，还要求非空。表里最多一个主键，但可以由多列组成（复合主键）。InnoDB 会把数据按主键顺序组织在磁盘上，所以主键不仅用来「找到行」，还决定了数据的物理排列顺序。"
+    },
+    {
+      "heading": "为什么强烈建议用自增整数",
+      "text": "InnoDB 的表就是一棵按主键排序的 B+ 树，新行按主键顺序追加，写入是顺序的、很快。如果主键是随机字符串（比如 UUID），每插入一行都可能落在树中间，造成页分裂和随机写，数据量一大插入性能就明显下降。所以「无业务含义的自增 BIGINT」是最常见的选择。"
+    },
+    {
+      "heading": "业务唯一键怎么办",
+      "text": "手机号、订单号这类天然唯一的字段，不要拿来当主键，而是加一个 UNIQUE 唯一索引。这样既保证了业务唯一性，又让主键保持短小稳定。主键一改，所有二级索引里记录的定位值都要跟着改，代价很高。"
+    },
+    {
+      "heading": "复合主键什么时候用",
+      "text": "关联表常用两列一起做复合主键，比如 order_items 里 (order_id, product_id)，天然去重。但复合主键会让所有二级索引都带上两列，而且业务变复杂后不好扩展，所以核心业务表还是推荐单列自增主键加唯一索引的组合。"
+    }
+  ],
+  "keyPoints": [
+    "主键 = 非空 + 唯一，一张表只能有一个主键。",
+    "InnoDB 按主键顺序存数据，主键越短越稳定越好。",
+    "优先用无业务含义的 BIGINT UNSIGNED 自增主键。",
+    "业务唯一字段用 UNIQUE 索引，不要占主键的位置。",
+    "不要用 UUID 这类随机值当聚簇索引主键，写入会变成随机写。"
+  ],
+  "snippets": [
+    {
+      "title": "自增主键 + 业务唯一索引",
+      "lang": "sql",
+      "code": "CREATE TABLE users (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '用户 id',\n  phone VARCHAR(20) NOT NULL COMMENT '手机号',\n  name VARCHAR(40) NOT NULL DEFAULT '',\n  city VARCHAR(40) NOT NULL DEFAULT '',\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id),\n  UNIQUE KEY uk_phone (phone)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+    },
+    {
+      "title": "复合主键的关联表",
+      "lang": "sql",
+      "code": "CREATE TABLE order_items (\n  order_id BIGINT UNSIGNED NOT NULL,\n  product_id BIGINT UNSIGNED NOT NULL,\n  quantity INT NOT NULL DEFAULT 1,\n  unit_price DECIMAL(12,2) NOT NULL,\n  PRIMARY KEY (order_id, product_id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+    }
+  ],
+  "pitfalls": [
+    "用手机号、身份证号当主键：长度大、可能变更，还会让所有二级索引跟着变长。",
+    "建表忘了写主键：InnoDB 会偷偷建一个 6 字节的隐藏主键，你既用不上也控制不了顺序。",
+    "用 VARCHAR 存 UUID 当聚簇主键：写入随机、页分裂严重，数据量大后插入变慢、表空间膨胀。",
+    "业务 id 用 INT：INT 最大约 21 亿，订单量一大就有溢出风险，直接上 BIGINT。"
+  ],
+  "enterprise": "企业规范里几乎都会写「每张表必须有主键，主键用 BIGINT UNSIGNED AUTO_INCREMENT」。分库分表场景则改用全局唯一 id（雪花算法、号段服务），但依然要保证趋势递增，避免随机主键带来的写入热点和页分裂。",
+  "related": ["auto-increment", "clustered-index", "index-concept", "create-table"]
+}

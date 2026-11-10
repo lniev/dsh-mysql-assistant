@@ -1,0 +1,513 @@
+{
+  "titleZh": "企业级实战",
+  "intro": "把知识地图里的知识放进真实业务：每个实战都从业务背景出发，给你可直接在 MySQL 8.0 执行的 SQL、上线检查清单和踩坑提示。建议在 SQL 操练场边做边验，做完把交付物存进自己的项目笔记。",
+  "scenarios": [
+    {
+      "id": "order-modeling",
+      "titleZh": "电商订单库建模",
+      "level": "L2",
+      "hours": 3,
+      "tags": [
+        "表设计",
+        "电商"
+      ],
+      "background": "团队要上线一个小型电商，第一件事是把用户、商品、订单、支付、库存的表设计出来。设计得好，后面查订单、对账、做报表都顺；设计得不好，改价后历史订单金额会变、对账要关联五六张表、扩展分库时无从下手。",
+      "goal": "设计出满足业务查询与对账的电商核心表：类型选对、主键与约束齐全、冗余字段有同步方、高频查询有索引。",
+      "steps": [
+        {
+          "title": "先画关系图，再动手建表",
+          "detail": "用户 1:N 订单，订单 1:N 订单项，商品 1:N 订单项，订单 1:1 支付，商品 1:1 库存。关系定下来后，表和字段自然就出来了。注意订单项要冗余「商品名 + 单价」做下单快照，否则商品改价后历史订单金额就错乱了。",
+          "sql": ""
+        },
+        {
+          "title": "建用户、分类、商品表",
+          "detail": "手机号加唯一索引兜住业务唯一性；金额用 DECIMAL(10,2)；分类存 parent_id 做自引用树；商品表记录上下架状态，方便前台只查 on_sale = 1。",
+          "sql": "CREATE TABLE users (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  name VARCHAR(50) NOT NULL,\n  phone VARCHAR(20) NOT NULL,\n  city VARCHAR(50) DEFAULT NULL,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id),\n  UNIQUE KEY uk_phone (phone),\n  KEY idx_city_created (city, created_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nCREATE TABLE categories (\n  id INT UNSIGNED NOT NULL AUTO_INCREMENT,\n  name VARCHAR(50) NOT NULL,\n  parent_id INT UNSIGNED DEFAULT NULL,\n  PRIMARY KEY (id),\n  KEY idx_parent (parent_id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nCREATE TABLE products (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  category_id INT UNSIGNED NOT NULL,\n  name VARCHAR(100) NOT NULL,\n  price DECIMAL(10,2) NOT NULL,\n  on_sale TINYINT NOT NULL DEFAULT 1,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id),\n  KEY idx_category_on_sale (category_id, on_sale),\n  CONSTRAINT fk_products_category FOREIGN KEY (category_id) REFERENCES categories (id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+        },
+        {
+          "title": "建订单、订单项、支付表",
+          "detail": "订单号要有唯一索引（幂等与对账都靠它）；订单项冗余商品名和单价；支付表按 order_id 唯一，保证一单最多一笔有效支付。订单表把 total_amount 冗余存下来，查列表时不用再关联订单项求和。",
+          "sql": "CREATE TABLE orders (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  order_no VARCHAR(32) NOT NULL,\n  user_id BIGINT UNSIGNED NOT NULL,\n  status TINYINT NOT NULL DEFAULT 0 COMMENT '0待支付 1已支付 2已发货 3已完成 4已取消',\n  total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  paid_at DATETIME DEFAULT NULL,\n  PRIMARY KEY (id),\n  UNIQUE KEY uk_order_no (order_no),\n  KEY idx_user_created (user_id, created_at),\n  KEY idx_status_created (status, created_at),\n  CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users (id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nCREATE TABLE order_items (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  order_id BIGINT UNSIGNED NOT NULL,\n  product_id BIGINT UNSIGNED NOT NULL,\n  product_name VARCHAR(100) NOT NULL COMMENT '下单快照',\n  quantity INT NOT NULL,\n  unit_price DECIMAL(10,2) NOT NULL COMMENT '下单快照单价',\n  PRIMARY KEY (id),\n  KEY idx_order (order_id),\n  KEY idx_product (product_id),\n  CONSTRAINT fk_items_order FOREIGN KEY (order_id) REFERENCES orders (id),\n  CONSTRAINT fk_items_product FOREIGN KEY (product_id) REFERENCES products (id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nCREATE TABLE payments (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  order_id BIGINT UNSIGNED NOT NULL,\n  method VARCHAR(20) NOT NULL,\n  amount DECIMAL(10,2) NOT NULL,\n  paid_at DATETIME DEFAULT NULL,\n  PRIMARY KEY (id),\n  UNIQUE KEY uk_order (order_id),\n  CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES orders (id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+        },
+        {
+          "title": "建独立库存表并补齐索引",
+          "detail": "库存单独一张表，行级锁只锁一个商品；stock 用无符号语义由应用保证不为负，updated_at 记录变动时间便于排查。再给订单表补一个覆盖「用户查自己的订单」的联合索引。",
+          "sql": "CREATE TABLE inventory (\n  product_id BIGINT UNSIGNED NOT NULL,\n  stock INT NOT NULL DEFAULT 0,\n  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (product_id),\n  CONSTRAINT fk_inventory_product FOREIGN KEY (product_id) REFERENCES products (id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nALTER TABLE orders ADD INDEX idx_user_status_created (user_id, status, created_at);"
+        },
+        {
+          "title": "插入样例数据并验证查询",
+          "detail": "造一条完整链路：用户 → 分类 → 商品 → 下单 → 订单项 → 支付 → 扣库存，然后用一条四表联查把订单详情捞出来，验证表结构和索引是否支撑真实查询。",
+          "sql": "INSERT INTO users (name, phone, city) VALUES ('张三', '13800000001', '杭州');\nINSERT INTO categories (name, parent_id) VALUES ('数码', NULL);\nINSERT INTO products (category_id, name, price, on_sale) VALUES (1, '蓝牙耳机', 299.00, 1);\nINSERT INTO inventory (product_id, stock) VALUES (1, 100);\nINSERT INTO orders (order_no, user_id, status, total_amount) VALUES ('ORD202611100001', 1, 1, 598.00);\nINSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price) VALUES (1, 1, '蓝牙耳机', 2, 299.00);\nINSERT INTO payments (order_id, method, amount, paid_at) VALUES (1, 'alipay', 598.00, NOW());\n\nSELECT o.order_no, u.name AS user_name, oi.product_name, oi.quantity, oi.unit_price, p.method\nFROM orders o\nJOIN users u ON u.id = o.user_id\nJOIN order_items oi ON oi.order_id = o.id\nLEFT JOIN payments p ON p.order_id = o.id\nWHERE o.order_no = 'ORD202611100001';"
+        }
+      ],
+      "deliverable": "一套可执行的建表 SQL（6 张表 + 索引）+ 关系图 + 「表 → 主键 → 索引 → 支撑的查询」对照清单",
+      "checklist": [
+        "所有金额字段都是 DECIMAL(10,2)，没有 FLOAT / DOUBLE",
+        "订单号、手机号、支付 order_id 都有唯一约束",
+        "订单项冗余了商品名与单价，能还原下单时价格",
+        "订单表有 (user_id, created_at) 与 (status, created_at) 两个高频索引",
+        "订单列表查询不需要再 SUM(order_items) 算总额"
+      ],
+      "pitfalls": [
+        "把金额存成 FLOAT：0.1 + 0.2 出现 0.30000000000000004，对账永远差几分钱。",
+        "订单表不冗余 total_amount：每次查列表都要关联订单项做 SUM，数据一大就慢，还容易漏算。",
+        "订单项只存 product_id 不存快照价：商品改价后历史订单金额被改写，财务对账直接崩。",
+        "所有 VARCHAR 一律给 255：索引变长、行变大，白白浪费 buffer pool。"
+      ],
+      "pageIds": [
+        "ecommerce-schema",
+        "create-table",
+        "primary-key",
+        "foreign-key",
+        "normalization"
+      ]
+    },
+    {
+      "id": "order-query-pagination",
+      "titleZh": "订单查询与深分页优化",
+      "level": "L3",
+      "hours": 2,
+      "tags": [
+        "查询",
+        "分页"
+      ],
+      "background": "运营后台要按用户、状态、时间查订单，还要能翻到很后面。一开始 LIMIT 0,20 很快，等用户翻到第 5000 页，接口从 30ms 变成 3s，页面上转圈转到超时。这不是数据多的问题，是「先扫再丢」的写法问题。",
+      "goal": "给订单列表做出稳定在百毫秒内的分页查询，并用游标法 / 延迟关联替换 LIMIT 大 OFFSET。",
+      "steps": [
+        {
+          "title": "先造出足够多的数据",
+          "detail": "用 MySQL 8.0 的递归 CTE 快速造 10 万行订单，把深分页问题复现出来。cte_max_recursion_depth 默认 1000，必须先调大，否则递归到一半就报错。",
+          "sql": "SET SESSION cte_max_recursion_depth = 200000;\n\nINSERT INTO orders (order_no, user_id, status, total_amount, created_at)\nWITH RECURSIVE seq (n) AS (\n  SELECT 1\n  UNION ALL\n  SELECT n + 1 FROM seq WHERE n < 100000\n)\nSELECT CONCAT('ORD', LPAD(n, 8, '0')),\n       FLOOR(1 + RAND() * 1000),\n       FLOOR(RAND() * 5),\n       ROUND(RAND() * 1000, 2),\n       NOW() - INTERVAL FLOOR(RAND() * 365) DAY\nFROM seq;"
+        },
+        {
+          "title": "复现深分页：LIMIT 大 OFFSET",
+          "detail": "LIMIT 20 OFFSET 99980 并不是只读 20 行，而是先按顺序扫过 10 万行、丢掉前 99980 行，再返回 20 行。翻得越深越慢，这就是后台导出、翻页卡死的根因。",
+          "sql": "SELECT id, order_no, total_amount, created_at\nFROM orders\nORDER BY id\nLIMIT 20 OFFSET 99980;"
+        },
+        {
+          "title": "改写一：游标法（按上一页最大 id 翻页）",
+          "detail": "记住上一页最后一行的 id，下一页直接 WHERE id > 上一页最大 id，从索引定位点开始顺序取 20 行，复杂度从「扫 N 行」变成「扫 20 行」。前端不要求跳页时，这是首选方案。",
+          "sql": "-- 第一页\nSELECT id, order_no, total_amount, created_at\nFROM orders\nORDER BY id\nLIMIT 20;\n\n-- 后续页：假设上一页最后一行 id = 99980\nSELECT id, order_no, total_amount, created_at\nFROM orders\nWHERE id > 99980\nORDER BY id\nLIMIT 20;"
+        },
+        {
+          "title": "改写二：延迟关联（必须跳页时）",
+          "detail": "先在二级索引 / 主键上分页拿到 20 个 id，再拿这 20 个 id 回表取整行。参与排序和偏移的只剩索引列，扫描量大幅下降；页面既保住 OFFSET 跳页能力，又不至于整行整行地扫。",
+          "sql": "SELECT o.id, o.order_no, o.total_amount, o.created_at\nFROM orders o\nJOIN (\n  SELECT id\n  FROM orders\n  WHERE status = 1\n  ORDER BY id\n  LIMIT 20 OFFSET 50000\n) t ON t.id = o.id\nORDER BY o.id;"
+        },
+        {
+          "title": "用 EXPLAIN 对比三种写法",
+          "detail": "看 type、rows、Extra 三列：大 OFFSET 的 rows 会很大；游标法 rows 稳定在 20 附近；延迟关联的子查询走覆盖索引（Using index）后再回表 20 次。把这个对比结论写进接口文档，谁再写大 OFFSET 就让 TA 看这里。",
+          "sql": "EXPLAIN SELECT id FROM orders ORDER BY id LIMIT 20 OFFSET 99980;\n\nEXPLAIN SELECT id FROM orders WHERE id > 99980 ORDER BY id LIMIT 20;\n\nEXPLAIN SELECT o.id FROM orders o JOIN (\n  SELECT id FROM orders WHERE status = 1 ORDER BY id LIMIT 20 OFFSET 50000\n) t ON t.id = o.id;"
+        }
+      ],
+      "deliverable": "一份分页方案对比报告：三种写法的 SQL、EXPLAIN 截图与耗时数据，外加接口层面的选型结论",
+      "checklist": [
+        "列表接口默认使用游标分页，不再用 LIMIT 大 OFFSET",
+        "翻页排序字段与索引顺序一致（按 id 或 (status, id)）",
+        "必须跳页的场景改成延迟关联，且子查询只查索引列",
+        "前端拿到 nextCursor（上一页最大 id），不再传 pageNo",
+        "EXPLAIN 中 rows 稳定在页大小附近，没有大范围扫描"
+      ],
+      "pitfalls": [
+        "只加索引不改 SQL：LIMIT 大 OFFSET 就算走索引也要扫过前 N 行，治标不治本。",
+        "游标分页拿「非唯一列」当游标：created_at 有重复值时会漏行或重复行，必须带上唯一列（id）做二级排序。",
+        "把 ORDER BY 和索引顺序写反：索引 (status, id) 却按 id 排序，优化器只能 filesort。",
+        "分页查询 SELECT *：延迟关联或覆盖索引都用不上，回表次数暴增。"
+      ],
+      "pageIds": [
+        "deep-pagination",
+        "order-limit",
+        "explain",
+        "index-design"
+      ]
+    },
+    {
+      "id": "index-tuning",
+      "titleZh": "慢查询定位与索引优化",
+      "level": "L3",
+      "hours": 3,
+      "tags": [
+        "索引",
+        "优化"
+      ],
+      "background": "线上告警：订单列表接口 P99 从 80ms 涨到 2.4s。DBA 给了你一条慢查询日志记录，但没告诉你原因。你需要从日志定位 SQL、用 EXPLAIN 看懂执行计划、补一个正确的联合索引，再验证耗时回落并确认没有拖慢写入。",
+      "goal": "完整走一遍「慢查询日志 → EXPLAIN 分析 → 联合索引 / SQL 改写 → 压测验证」的优化闭环。",
+      "steps": [
+        {
+          "title": "打开慢查询日志，先有数据",
+          "detail": "slow_query_log 抓执行超过 long_query_time 的语句；log_queries_not_using_indexes 会把没走索引的 SQL 也记下来。线上建议 1s 起步，测试环境可以调成 0.1s 方便复现。SET GLOBAL 需要管理员权限，没有权限就让 DBA 开。",
+          "sql": "SET GLOBAL slow_query_log = ON;\nSET GLOBAL long_query_time = 0.1;\nSET GLOBAL log_queries_not_using_indexes = ON;\n\nSHOW VARIABLES LIKE 'slow_query_log%';\nSHOW VARIABLES LIKE 'long_query_time';\nSHOW GLOBAL STATUS LIKE 'Slow_queries';"
+        },
+        {
+          "title": "锁定要优化的那条 SQL",
+          "detail": "业务上最典型的是「某用户在某状态下最近的订单」。如果 (user_id, status, created_at) 上没有合适的联合索引，MySQL 只能扫很多行再排序。先用逻辑读和耗时确认它真的慢。",
+          "sql": "SELECT id, order_no, total_amount, created_at\nFROM orders\nWHERE user_id = 123\n  AND status = 1\nORDER BY created_at DESC\nLIMIT 20;\n\nSHOW SESSION STATUS LIKE 'Last_query_cost';"
+        },
+        {
+          "title": "EXPLAIN 读懂执行计划",
+          "detail": "重点四列：type 是不是 ALL / index（全扫）、key 是不是 NULL（没用索引）、rows 估算扫多少行、Extra 有没有 Using filesort / Using temporary。只要出现 filesort + 大 rows，基本就是「索引没覆盖过滤和排序」。",
+          "sql": "EXPLAIN SELECT id, order_no, total_amount, created_at\nFROM orders\nWHERE user_id = 123\n  AND status = 1\nORDER BY created_at DESC\nLIMIT 20;\n\nEXPLAIN FORMAT=JSON\nSELECT id, order_no, total_amount, created_at\nFROM orders\nWHERE user_id = 123\n  AND status = 1\nORDER BY created_at DESC\nLIMIT 20;"
+        },
+        {
+          "title": "建联合索引，顺序按「等值 → 范围 → 排序」",
+          "detail": "(user_id, status, created_at)：user_id、status 是等值条件放前面，created_at 用来排序放最后，这样过滤完直接按索引顺序取 20 条，filesort 消失。注意别在 created_at 上套函数，否则排序列失效。",
+          "sql": "ALTER TABLE orders\n  ADD INDEX idx_user_status_created (user_id, status, created_at);\n\nEXPLAIN SELECT id, order_no, total_amount, created_at\nFROM orders\nWHERE user_id = 123\n  AND status = 1\nORDER BY created_at DESC\nLIMIT 20;"
+        },
+        {
+          "title": "覆盖索引与索引失效改写",
+          "detail": "如果接口只要 id、状态、时间，把需要的列都放进索引就能「不回表」。另一类常见慢是 WHERE DATE(created_at) = ...，索引列被函数包住直接失效，要改写成范围条件。",
+          "sql": "-- 覆盖索引：查询列全在索引里，Extra 出现 Using index\nEXPLAIN SELECT user_id, status, created_at\nFROM orders\nWHERE user_id = 123 AND status = 1\nORDER BY created_at DESC\nLIMIT 20;\n\n-- 失效写法：索引列上套函数\nEXPLAIN SELECT id FROM orders WHERE DATE(created_at) = '2026-01-01';\n\n-- 改写后：范围条件走索引\nEXPLAIN SELECT id FROM orders\nWHERE created_at >= '2026-01-01 00:00:00'\n  AND created_at <  '2026-01-02 00:00:00';"
+        },
+        {
+          "title": "验证收益，并检查写入代价",
+          "detail": "优化不是加完索引就结束：对比优化前后耗时与 rows，再看写入侧有没有变慢（索引越多，INSERT / UPDATE 越慢）、磁盘占用涨了多少。一个查询快 30 倍但写入慢 20% 的取舍要写进评审记录。",
+          "sql": "SHOW INDEX FROM orders;\n\nSELECT index_name, stat_value\nFROM mysql.innodb_index_stats\nWHERE database_name = DATABASE() AND table_name = 'orders';"
+        }
+      ],
+      "deliverable": "一份单条慢查询的优化报告：优化前 EXPLAIN / 耗时、索引 DDL、优化后 EXPLAIN / 耗时、写入影响评估",
+      "checklist": [
+        "慢查询日志已开启，能按 long_query_time 找到目标 SQL",
+        "能逐列解释 EXPLAIN 的 type / key / rows / Extra",
+        "索引列顺序符合「等值 → 范围 → 排序」，无 Using filesort",
+        "失效写法（函数包列、隐式转换、前导 %）已识别并改写",
+        "记录了索引的写入代价与磁盘增长，不是无脑加索引"
+      ],
+      "pitfalls": [
+        "看 EXPLAIN 只盯 type：type=ref 也可能扫几十万行，rows 和 Extra 同样重要。",
+        "联合索引顺序拍脑袋：把范围列放中间，后面的列全部用不上，等于白建。",
+        "为了一个低频查询加一个索引：写入放大、优化器选择变多，整体可能更慢。",
+        "加完索引不 ANALYZE TABLE：统计信息没更新，优化器仍可能选错执行计划。"
+      ],
+      "pageIds": [
+        "slow-query-log",
+        "explain",
+        "composite-index",
+        "covering-index",
+        "index-failure"
+      ]
+    },
+    {
+      "id": "inventory-oversell",
+      "titleZh": "事务与库存防超卖",
+      "level": "L4",
+      "hours": 4,
+      "tags": [
+        "事务",
+        "库存"
+      ],
+      "background": "大促零点，库存 100 件，卖出去了 137 件。复盘发现扣库存逻辑是「先 SELECT 查库存，判断够不够，再 UPDATE 减一」——两个请求同时查到 100，都判断够，都减一，于是超卖。要彻底解决，得靠数据库的原子性与锁，而不是应用层的 if。",
+      "goal": "先复现超卖，再用条件更新、乐观锁、悲观锁三种方案修复，并验证并发下库存永不为负。",
+      "steps": [
+        {
+          "title": "建一张带版本号的库存表",
+          "detail": "stock 存剩余库存，version 用于乐观锁。updated_at 由数据库自动维护，便于排查「谁在什么时候改的」。初始 100 件。",
+          "sql": "CREATE TABLE inventory (\n  product_id BIGINT UNSIGNED NOT NULL,\n  stock INT NOT NULL DEFAULT 0,\n  version INT NOT NULL DEFAULT 0,\n  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (product_id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nINSERT INTO inventory (product_id, stock, version) VALUES (1, 100, 0)\nON DUPLICATE KEY UPDATE stock = 100, version = 0;"
+        },
+        {
+          "title": "复现超卖：先查后改为什么错",
+          "detail": "两个事务 A / B 并发执行：都 SELECT 到 stock = 100，都判断 ≥1，都执行 UPDATE stock = stock - 1。最终库存只减了 2 吗？如果是「读到旧值再写回」，可能两个都写成 99。核心问题：判断和扣减不是一个原子操作。",
+          "sql": "-- 事务 A 与事务 B 同时执行下面两步，观察结果\nSELECT stock FROM inventory WHERE product_id = 1;\n-- 应用层判断 stock >= 1 后执行：\nUPDATE inventory SET stock = stock - 1 WHERE product_id = 1;\n\nSELECT stock FROM inventory WHERE product_id = 1;"
+        },
+        {
+          "title": "方案一：条件更新，把判断塞进 UPDATE",
+          "detail": "UPDATE ... SET stock = stock - 1 WHERE product_id = 1 AND stock >= 1 是一条原子语句：MySQL 在行锁保护下完成「判断 + 扣减」，扣不动就影响 0 行。应用层看影响行数决定成功还是「库存不足」，这是最常用也最稳的写法。",
+          "sql": "START TRANSACTION;\n\nUPDATE inventory\nSET stock = stock - 1, version = version + 1\nWHERE product_id = 1\n  AND stock >= 1;\n\n-- 影响 1 行 = 扣减成功；影响 0 行 = 库存不足，直接回滚\nSELECT ROW_COUNT() AS affected_rows;\n\nCOMMIT;"
+        },
+        {
+          "title": "方案二：乐观锁，失败重试",
+          "detail": "先读出 stock 与 version，再 UPDATE 时带上 version 条件。版本被别的请求改过就影响 0 行，应用层重试即可。适合读多写少、冲突不激烈的场景；冲突激烈时重试次数会飙升。",
+          "sql": "SELECT stock, version FROM inventory WHERE product_id = 1;\n-- 假设读到 stock = 99, version = 5\n\nUPDATE inventory\nSET stock = 99 - 1, version = version + 1\nWHERE product_id = 1\n  AND version = 5\n  AND stock >= 1;\n\nSELECT ROW_COUNT() AS affected_rows;"
+        },
+        {
+          "title": "方案三：悲观锁，用 FOR UPDATE 串行化",
+          "detail": "在事务里 SELECT ... FOR UPDATE 锁住库存行，其他事务在这里排队等锁，直到你 COMMIT。逻辑简单但并发度低，热点商品容易把连接池打满。实际项目优先用条件更新，FOR UPDATE 只在需要「读出来算复杂逻辑再写回」时用。",
+          "sql": "-- 会话 1\nSTART TRANSACTION;\nSELECT stock FROM inventory WHERE product_id = 1 FOR UPDATE;\nUPDATE inventory SET stock = stock - 1 WHERE product_id = 1 AND stock >= 1;\nCOMMIT;\n\n-- 会话 2（会话 1 未提交时会在这里等锁）\nSELECT stock FROM inventory WHERE product_id = 1 FOR UPDATE;"
+        },
+        {
+          "title": "验证：库存不为负 + 对账",
+          "detail": "压测 100 并发扣减，结束后查 stock 是否 ≥ 0、是否等于「初始库存 - 成功扣减次数」。再用一条查询确认没有任何负库存行，作为上线前的兜底校验。",
+          "sql": "SELECT product_id, stock, version\nFROM inventory\nWHERE product_id = 1;\n\n-- 兜底校验：任何一行都不该为负\nSELECT product_id, stock FROM inventory WHERE stock < 0;\n\n-- 对账：成功订单的扣减总量 = 初始库存 - 当前库存\nSELECT COUNT(*) AS success_cnt, SUM(quantity) AS sold_qty\nFROM order_items oi\nJOIN orders o ON o.id = oi.order_id\nWHERE oi.product_id = 1 AND o.status IN (1, 2, 3);"
+        }
+      ],
+      "deliverable": "一份超卖演练记录：复现现象 + 三种修复方案的 SQL + 100 并发压测结果（库存不为负、对账一致）",
+      "checklist": [
+        "扣减 SQL 是单条条件更新，判断与扣减原子执行",
+        "应用层按 ROW_COUNT() 区分「库存不足」与「并发冲突」，前者不重试",
+        "压测 100 并发后库存 ≥ 0，且与成功订单数量对得上",
+        "热点商品方案已评估（拆库存行 / Redis 预扣），不是只靠单行锁硬扛",
+        "事务内没有 RPC、日志、循环等耗时操作，事务足够短"
+      ],
+      "pitfalls": [
+        "先 SELECT 再 if 再 UPDATE：这正是超卖的根因，判断和扣减必须合成一条原子语句。",
+        "用 FOR UPDATE 扣所有商品：锁范围过大，热点时连接池瞬间打满。",
+        "悲观锁事务里调外部接口：锁被持有几秒甚至几十秒，其他请求全排队超时。",
+        "库存字段用 UNSIGNED 却靠数据库报错兜底：报错信息对用户不友好，且事务已污染，要应用层显式判断。"
+      ],
+      "pageIds": [
+        "inventory-oversell",
+        "acid",
+        "optimistic-pessimistic",
+        "lock-types",
+        "transaction-pitfalls"
+      ]
+    },
+    {
+      "id": "order-idempotency",
+      "titleZh": "订单幂等：唯一键与状态机",
+      "level": "L4",
+      "hours": 3,
+      "tags": [
+        "幂等",
+        "唯一键"
+      ],
+      "background": "用户手抖连点两次「提交订单」，或者网关超时后重试，同一个请求到达两次。如果没有幂等设计，用户会收到两笔订单、被扣两次款。幂等不是「代码里判断一下」，而是要用数据库的唯一约束做最后一道防线，再用状态机挡住非法流转。",
+      "goal": "用「幂等 token / 订单号唯一索引 + 冲突读取 + 状态机条件更新」保证同一请求重复提交只产生一条订单。",
+      "steps": [
+        {
+          "title": "建幂等记录表，并把唯一键放数据库层",
+          "detail": "客户端每次提交带一个 request_token，服务端先用它做唯一约束兜底。订单号本身也要唯一索引——两道防线，缺一不可。应用层「先查再插」在并发下不成立，只有数据库唯一约束是原子的。",
+          "sql": "CREATE TABLE idempotency_record (\n  token VARCHAR(64) NOT NULL,\n  order_id BIGINT UNSIGNED DEFAULT NULL,\n  status TINYINT NOT NULL DEFAULT 0 COMMENT '0处理中 1已完成',\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (token),\n  KEY idx_order (order_id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nALTER TABLE orders ADD UNIQUE KEY uk_order_no (order_no);"
+        },
+        {
+          "title": "第一次请求：正常写入",
+          "detail": "同一个 token 只能成功插入一次，插入成功后继续创建订单，并把 order_id 回填到幂等记录。注意：token 的插入必须和订单创建在同一个事务里，否则会出现「token 占了但订单没建」的半成品状态。",
+          "sql": "START TRANSACTION;\n\nINSERT INTO idempotency_record (token, status) VALUES ('req-20261110-0001', 0);\n\nINSERT INTO orders (order_no, user_id, status, total_amount)\nVALUES ('ORD202611100001', 1, 0, 598.00);\n\nSELECT LAST_INSERT_ID() AS new_order_id;\n-- 假设返回 1\nUPDATE idempotency_record SET order_id = 1, status = 1 WHERE token = 'req-20261110-0001';\n\nCOMMIT;"
+        },
+        {
+          "title": "重复请求：撞唯一键，改成读已有结果",
+          "detail": "第二次请求插入同一个 token 会报 Duplicate entry。生产代码里捕获这个错误（错误码 1062），回查 idempotency_record 拿到 order_id，直接返回「已处理」的结果，而不是报错给用户，也不重复下单。",
+          "sql": "-- 第二次请求，会报 ERROR 1062 (23000): Duplicate entry\nINSERT INTO idempotency_record (token, status) VALUES ('req-20261110-0001', 0);\n\n-- 幂等处理：冲突后读已有记录，直接返回\nSELECT token, order_id, status\nFROM idempotency_record\nWHERE token = 'req-20261110-0001';"
+        },
+        {
+          "title": "状态机：只允许合法流转",
+          "detail": "支付回调可能重试多次。用「带当前状态」的条件更新做状态流转：只有待支付 (status = 0) 才能改成已支付 (1)，重复回调第二次影响 0 行，直接返回成功即可，不需要抛异常。非法流转（比如已取消 → 已支付）也会被挡住。",
+          "sql": "-- 待支付 → 已支付：只成功一次\nUPDATE orders\nSET status = 1, paid_at = NOW()\nWHERE order_no = 'ORD202611100001'\n  AND status = 0;\n\nSELECT ROW_COUNT() AS affected_rows;\n\n-- 重复回调：status 已经是 1，影响 0 行，视为已处理\nUPDATE orders\nSET status = 1, paid_at = NOW()\nWHERE order_no = 'ORD202611100001'\n  AND status = 0;"
+        },
+        {
+          "title": "用 INSERT ... ON DUPLICATE KEY 简化「存在即更新」",
+          "detail": "对于「有则更新、无则插入」的幂等场景，可以一条语句搞定。注意 ON DUPLICATE KEY UPDATE 返回的影响行数含义：1 = 插入，2 = 更新，0 = 值未变化，判断逻辑要按这个来，不要写成 == 1。",
+          "sql": "INSERT INTO inventory (product_id, stock)\nVALUES (1, 100)\nON DUPLICATE KEY UPDATE\n  stock = stock + VALUES(stock);\n\nSELECT ROW_COUNT() AS affected_rows;"
+        },
+        {
+          "title": "并发验证：同一 token 只成功一次",
+          "detail": "用两个会话同时插同一个 token，只有一个能成功，另一个拿到 1062/1205 一类错误。应用层统一走「冲突 → 查已有 → 返回相同结果」，用户的重复点击就彻底无害了。",
+          "sql": "-- 会话 A\nSTART TRANSACTION;\nINSERT INTO idempotency_record (token, status) VALUES ('req-concurrent-001', 0);\n\n-- 会话 B 同时执行同一句，会报 Duplicate entry（或等待 A 提交后报错）\n-- INSERT INTO idempotency_record (token, status) VALUES ('req-concurrent-001', 0);\n\n-- 校验：这个 token 只有一条记录\nSELECT COUNT(*) AS token_cnt FROM idempotency_record WHERE token = 'req-concurrent-001';"
+        }
+      ],
+      "deliverable": "一张订单状态机图 + 幂等实现方案（表结构、唯一索引、冲突处理伪代码、状态流转 SQL）",
+      "checklist": [
+        "幂等 token 与业务订单号都有唯一约束，兜底放在数据库",
+        "token 记录与订单创建在同一事务，不会出现半成品",
+        "捕获 1062 冲突后返回已有结果，而不是把错误抛给用户",
+        "状态流转用 WHERE 带当前状态的条件更新，重复回调影响 0 行",
+        "同一 token 并发提交 3 次，库里只有 1 条订单且返回一致"
+      ],
+      "pitfalls": [
+        "只靠应用层「先 SELECT 判断有没有」：两个并发请求都查不到，都插入，幂等直接失效。",
+        "幂等 token 只在内存 / Redis 里判重：进程重启或缓存过期后重复请求就漏过去了。",
+        "状态更新不带当前状态条件：已取消的订单被支付回调改回已支付，状态机形同虚设。",
+        "把 ON DUPLICATE KEY UPDATE 的影响行数当布尔值用：2 表示更新，判断写错会误判为重试。"
+      ],
+      "pageIds": [
+        "order-idempotency",
+        "unique-check-default",
+        "insert",
+        "ecommerce-schema"
+      ]
+    },
+    {
+      "id": "reporting-statistics",
+      "titleZh": "报表统计与窗口函数",
+      "level": "L3",
+      "hours": 3,
+      "tags": [
+        "报表",
+        "窗口函数"
+      ],
+      "background": "老板要三张报表：每天销售额、每个品类卖得最好的 3 个商品、日销售额环比。运营自己写的 SQL 把主库 CPU 打到 90%，报表还经常算错（一对多 JOIN 后 SUM 翻倍）。报表 SQL 要又对又快，还不能拖垮线上库。",
+      "goal": "用聚合 + 窗口函数写出可核对的报表 SQL，并把重报表从主库挪走（从库 / 汇总表）。",
+      "steps": [
+        {
+          "title": "按天统计销售额（先保证口径正确）",
+          "detail": "只统计已支付及之后的状态，用 DATE(created_at) 分组。注意：一对多关联后再 SUM 金额会翻倍，所以这里只从 orders 单表取 total_amount，不 JOIN 订单项。",
+          "sql": "SELECT DATE(created_at) AS stat_date,\n       COUNT(*) AS order_cnt,\n       SUM(total_amount) AS gmv\nFROM orders\nWHERE status IN (1, 2, 3)\n  AND created_at >= '2026-01-01 00:00:00'\nGROUP BY DATE(created_at)\nORDER BY stat_date;"
+        },
+        {
+          "title": "品类内销量 Top3：ROW_NUMBER 窗口函数",
+          "detail": "先在子查询里把「品类 × 商品」的销售额聚合好，再用 ROW_NUMBER() OVER (PARTITION BY 品类 ORDER BY 销售额 DESC) 打序号，外层筛 rn <= 3。窗口函数在 8.0 才有；5.7 只能靠变量或自连接，非常别扭。",
+          "sql": "WITH item_sales AS (\n  SELECT c.id AS category_id,\n         c.name AS category_name,\n         p.name AS product_name,\n         SUM(oi.quantity * oi.unit_price) AS sales\n  FROM order_items oi\n  JOIN orders o ON o.id = oi.order_id\n  JOIN products p ON p.id = oi.product_id\n  JOIN categories c ON c.id = p.category_id\n  WHERE o.status IN (1, 2, 3)\n  GROUP BY c.id, c.name, p.id, p.name\n)\nSELECT category_name, product_name, sales, rn\nFROM (\n  SELECT category_name, product_name, sales,\n         ROW_NUMBER() OVER (PARTITION BY category_id ORDER BY sales DESC) AS rn\n  FROM item_sales\n) ranked\nWHERE rn <= 3\nORDER BY category_name, rn;"
+        },
+        {
+          "title": "日环比：LAG 取前一天的值",
+          "detail": "LAG(gmv, 1) OVER (ORDER BY stat_date) 拿到上一行的销售额，再算增长率。分母为 0 要用 NULLIF 兜住，否则报表里会冒出除零错误或奇怪的 NULL。",
+          "sql": "WITH daily AS (\n  SELECT DATE(created_at) AS stat_date, SUM(total_amount) AS gmv\n  FROM orders\n  WHERE status IN (1, 2, 3)\n  GROUP BY DATE(created_at)\n)\nSELECT stat_date,\n       gmv,\n       LAG(gmv) OVER (ORDER BY stat_date) AS prev_gmv,\n       ROUND((gmv - LAG(gmv) OVER (ORDER BY stat_date))\n             / NULLIF(LAG(gmv) OVER (ORDER BY stat_date), 0) * 100, 2) AS dod_pct\nFROM daily\nORDER BY stat_date;"
+        },
+        {
+          "title": "累计销售额：SUM() OVER 滚动汇总",
+          "detail": "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW 表示从第一行累加到当前行，做「本月累计 GMV」这类看板指标很顺手。注意和 GROUP BY 的执行顺序：窗口函数在分组之后才计算。",
+          "sql": "WITH daily AS (\n  SELECT DATE(created_at) AS stat_date, SUM(total_amount) AS gmv\n  FROM orders\n  WHERE status IN (1, 2, 3)\n  GROUP BY DATE(created_at)\n)\nSELECT stat_date,\n       gmv,\n       SUM(gmv) OVER (ORDER BY stat_date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_gmv\nFROM daily\nORDER BY stat_date;"
+        },
+        {
+          "title": "把重报表挪出线上主库",
+          "detail": "报表 SQL 再优化也扛不住全表扫描 + 大排序。标准做法：报表走从库，或者按时把结果落到汇总表，看板只查汇总表。汇总表用主键 + ON DUPLICATE KEY UPDATE 保证重跑幂等。",
+          "sql": "CREATE TABLE daily_sales_stat (\n  stat_date DATE NOT NULL,\n  category_id INT UNSIGNED NOT NULL,\n  order_cnt INT NOT NULL DEFAULT 0,\n  gmv DECIMAL(14,2) NOT NULL DEFAULT 0.00,\n  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (stat_date, category_id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nINSERT INTO daily_sales_stat (stat_date, category_id, order_cnt, gmv)\nSELECT DATE(o.created_at), p.category_id, COUNT(DISTINCT o.id), SUM(oi.quantity * oi.unit_price)\nFROM orders o\nJOIN order_items oi ON oi.order_id = o.id\nJOIN products p ON p.id = oi.product_id\nWHERE o.status IN (1, 2, 3)\n  AND o.created_at >= '2026-01-01' AND o.created_at < '2026-02-01'\nGROUP BY DATE(o.created_at), p.category_id\nON DUPLICATE KEY UPDATE\n  order_cnt = VALUES(order_cnt),\n  gmv = VALUES(gmv);"
+        },
+        {
+          "title": "核对报表口径",
+          "detail": "报表上线前必须和财务或业务手工样本核对：取某一天，用明细 SQL 和报表 SQL 各算一遍，金额一致才算口径正确。注意 COUNT(DISTINCT o.id) 和 SUM(order_items) 是两个口径，前者是单量，后者是销售额，不能混着用。",
+          "sql": "-- 明细核对：某天商品明细\nSELECT o.id AS order_id, o.total_amount, oi.product_id, oi.quantity, oi.unit_price\nFROM orders o\nJOIN order_items oi ON oi.order_id = o.id\nWHERE o.status IN (1, 2, 3)\n  AND o.created_at >= '2026-01-01 00:00:00'\n  AND o.created_at <  '2026-01-02 00:00:00';\n\n-- 与报表结果对账\nSELECT stat_date, SUM(gmv) AS gmv_sum\nFROM daily_sales_stat\nWHERE stat_date = '2026-01-01'\nGROUP BY stat_date;"
+        }
+      ],
+      "deliverable": "三张报表 SQL（日 GMV、品类 Top3、日环比）+ 一张汇总表 DDL + 与明细核对一致的验证记录",
+      "checklist": [
+        "统计结果与「明细逐行核对」的金额完全一致",
+        "一对多 JOIN 后再 SUM 的翻倍问题已避免（或使用 DISTINCT / 预聚合）",
+        "窗口函数 PARTITION BY / ORDER BY 与业务语义一致（同销量时的排序规则明确）",
+        "环比等除法用 NULLIF 防除零",
+        "重报表走从库或汇总表，已验证主库 CPU 回落"
+      ],
+      "pitfalls": [
+        "JOIN 订单项后再 SUM(orders.total_amount)：一笔订单有 3 个商品，金额被算 3 次。",
+        "ROW_NUMBER 与 RANK 混用：并列销量时 RANK 会跳号，取 Top3 的数量可能与预期不同。",
+        "报表直接跑在业务主库：大范围扫描 + 排序把 buffer pool 冲掉，线上查询全部变慢。",
+        "日期统计没考虑时区 / 边界：用 DATE(created_at) 统计时，跨 0 点的订单归属要提前和业务对齐。"
+      ],
+      "pageIds": [
+        "report-queries",
+        "group-by",
+        "join-inner",
+        "read-write-split"
+      ]
+    },
+    {
+      "id": "read-write-split",
+      "titleZh": "主从复制与读写分离",
+      "level": "L4",
+      "hours": 3,
+      "tags": [
+        "复制",
+        "高可用"
+      ],
+      "background": "单机 MySQL 的读请求已经打满 CPU，写请求不多但很关键。方案是加一台从库：写走主库、读走从库。上线后发现新的问题：用户下单成功后跳转订单详情偶尔「订单不存在」——这就是主从延迟。读写分离能解决容量，但一致性要靠业务自己兜。",
+      "goal": "搭起一主一从（binlog 复制），验证复制状态与延迟，并设计「写后读主库」等一致性兜底规则。",
+      "steps": [
+        {
+          "title": "主库确认 binlog 与 server_id",
+          "detail": "复制依赖 binlog：主库把变更写进 binlog，从库拉取重放。server_id 在一套复制拓扑里必须唯一，否则从库会拒绝连接。生产环境建议用 ROW 格式 + GTID，便于故障切换。若某项未开启，需要在 my.cnf 里配置 log_bin、binlog_format = ROW、server_id 后重启。",
+          "sql": "SHOW VARIABLES LIKE 'log_bin';\nSHOW VARIABLES LIKE 'binlog_format';\nSHOW VARIABLES LIKE 'server_id';\nSHOW VARIABLES LIKE 'gtid_mode';\nSELECT @@log_bin, @@server_id;"
+        },
+        {
+          "title": "主库创建复制账号（最小权限）",
+          "detail": "复制账号只需要 REPLICATION SLAVE 权限，不要给 ALL。密码用强密码，并用 caching_sha2_password（8.0 默认）；从库连接时加 GET_SOURCE_PUBLIC_KEY=1，否则非 SSL 连接会认证失败。",
+          "sql": "CREATE USER 'repl'@'%' IDENTIFIED BY 'Repl_2026#Strong';\nGRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';\nFLUSH PRIVILEGES;\n\nSHOW GRANTS FOR 'repl'@'%';"
+        },
+        {
+          "title": "从库指向主库并启动复制",
+          "detail": "CHANGE REPLICATION SOURCE TO 是 8.0.23+ 的新语法（旧的 CHANGE MASTER TO 已废弃）。SOURCE_LOG_FILE / SOURCE_LOG_POS 从主库 SHOW MASTER STATUS 获取；START REPLICA 后 IO 线程与 SQL 线程都要 Yes 才算正常。",
+          "sql": "-- 在主库执行，记下 File 与 Position\nSHOW MASTER STATUS;\n\n-- 在从库执行（把 host / file / pos 换成实际值）\nCHANGE REPLICATION SOURCE TO\n  SOURCE_HOST = '10.0.0.12',\n  SOURCE_PORT = 3306,\n  SOURCE_USER = 'repl',\n  SOURCE_PASSWORD = 'Repl_2026#Strong',\n  SOURCE_LOG_FILE = 'mysql-bin.000001',\n  SOURCE_LOG_POS = 4,\n  GET_SOURCE_PUBLIC_KEY = 1;\n\nSTART REPLICA;\n\n-- 命令行加 \\G 竖排更好读；这里用普通查询即可\nSHOW REPLICA STATUS;"
+        },
+        {
+          "title": "验证复制状态与延迟",
+          "detail": "SHOW REPLICA STATUS 关注四个字段：Replica_IO_Running、Replica_SQL_Running 必须 Yes；Seconds_Behind_Source 是延迟秒数；Last_Error 有值就要先修。主库写一行、从库查一行，是最快的端到端验证。",
+          "sql": "-- 主库写入\nINSERT INTO users (name, phone, city) VALUES ('复制验证', '13900000099', '上海');\n\n-- 从库查询（可能因延迟短暂查不到，等 1 秒再查）\nSELECT id, name, phone FROM users WHERE phone = '13900000099';\n\nSHOW REPLICA STATUS;\n\nSELECT @@server_id AS current_server_id, @@read_only AS read_only;"
+        },
+        {
+          "title": "把从库设为只读，防止误写",
+          "detail": "read_only = ON 能阻止普通账号写从库（有 SUPER 的账号仍可写）。更严格用 super_read_only = ON。这一步能避免「写到了从库、主库没有」这种最难查的数据错乱。",
+          "sql": "SET GLOBAL read_only = ON;\nSET GLOBAL super_read_only = ON;\n\nSHOW VARIABLES LIKE 'read_only';\nSHOW VARIABLES LIKE 'super_read_only';\n\n-- 在从库执行写操作应被拒绝（有 SUPER 权限的账号除外）\nINSERT INTO users (name, phone) VALUES ('不该写入', '13900000098');"
+        },
+        {
+          "title": "设计一致性兜底：写后读主库",
+          "detail": "复制是异步的，下单成功后立刻读从库可能读不到。两种落地方式：① 写操作后 N 秒内的读走主库（按用户 / 会话标记）；② 记录写入位点，读到从库位点追平再返回。支付、库存、订单详情这类强一致读必须走主库。",
+          "sql": "-- 判断当前会话读的是主库还是从库（配合中间件或应用层路由）\nSELECT @@server_id AS server_id,\n       @@read_only AS read_only,\n       @@hostname AS hostname;\n\n-- 延迟监控：关注 Seconds_Behind_Source、Replica_SQL_Running_State，\n-- 超过阈值就降级为读主库\nSHOW REPLICA STATUS;"
+        }
+      ],
+      "deliverable": "一份复制搭建记录（参数、命令、状态截图）+ 读写分离路由规则表 + 延迟告警与降级方案",
+      "checklist": [
+        "主库 binlog 已开启，server_id 全拓扑唯一",
+        "复制账号只有 REPLICATION SLAVE 权限，密码足够强",
+        "SHOW REPLICA STATUS 两个线程都是 Yes，Seconds_Behind_Source 稳定在 0~1",
+        "从库已设 read_only / super_read_only，误写会被拒绝",
+        "写后立即读、支付、库存等强一致读走主库；延迟超阈值有降级规则"
+      ],
+      "pitfalls": [
+        "从库忘了设只读：应用配置写错一次，数据就分叉了，事后极难查。",
+        "用复制账号做业务读写：权限过大，账号泄露风险高，复制与业务应隔离。",
+        "把「读从库」当默认：用户注册后立即登录、下单后看详情都会遇到复制延迟。",
+        "大事务打爆从库延迟：一次删几百万行、一次改全表，从库要追很久；DDL 和大事务要评估复制影响。"
+      ],
+      "pageIds": [
+        "replication",
+        "read-write-split",
+        "binlog",
+        "group-replication"
+      ]
+    },
+    {
+      "id": "sharding-migration",
+      "titleZh": "分库分表与在线迁移",
+      "level": "L4",
+      "hours": 4,
+      "tags": [
+        "分库分表",
+        "迁移"
+      ],
+      "background": "订单表已经 2 亿行、单表 120GB，备份要 3 小时，加字段锁表 20 分钟，索引优化已经到极限。继续垂直升级成本太高，需要把订单表水平拆成 4 片。难点不是「拆」，而是怎么在不停止业务的前提下把数据迁过去、并且保证迁移期间数据不丢不错。",
+      "goal": "设计一个可执行的拆表方案：分片键与路由、新表结构、全量 + 增量迁移、一致性校验、灰度切换与回滚。",
+      "steps": [
+        {
+          "title": "先量化，确认真的需要拆",
+          "detail": "不要凭感觉拆。先看行数、数据量、索引大小、日增量，算出「不拆还能撑多久」。如果只是慢，先做索引优化与冷热归档，能延后半年就别急着分片——分片会带来跨片查询、分布式事务、全局唯一 id 一堆新问题。",
+          "sql": "SELECT table_name,\n       table_rows,\n       ROUND(data_length / 1024 / 1024, 2) AS data_mb,\n       ROUND(index_length / 1024 / 1024, 2) AS index_mb\nFROM information_schema.tables\nWHERE table_schema = DATABASE()\n  AND table_name = 'orders';\n\n-- 近 30 天增量，估算增长速度\nSELECT COUNT(*) AS last_30d_rows\nFROM orders\nWHERE created_at >= NOW() - INTERVAL 30 DAY;"
+        },
+        {
+          "title": "定分片键与分片数",
+          "detail": "订单表最常用的查询是「按用户查订单」，所以用 user_id 做分片键，user_id % 4 决定落到 orders_0 ~ orders_3。分片键选查询维度而不是时间，否则按用户查订单要扫所有分片。这里用取模最简单；数据倾斜明显时可用一致性哈希。",
+          "sql": "-- 路由规则：user_id % 4 决定分片\nSELECT 12345 % 4 AS shard_index;\n\n-- 创建 4 张分片表（结构用 LIKE 复制，先不加外键，跨片外键无意义）\nCREATE TABLE orders_0 LIKE orders;\nCREATE TABLE orders_1 LIKE orders;\nCREATE TABLE orders_2 LIKE orders;\nCREATE TABLE orders_3 LIKE orders;\n\n-- 分片表上把唯一键改成「(user_id, order_no)」以适配跨片\nALTER TABLE orders_0 DROP INDEX uk_order_no,\n  ADD UNIQUE KEY uk_user_order_no (user_id, order_no);\nALTER TABLE orders_1 DROP INDEX uk_order_no,\n  ADD UNIQUE KEY uk_user_order_no (user_id, order_no);\nALTER TABLE orders_2 DROP INDEX uk_order_no,\n  ADD UNIQUE KEY uk_user_order_no (user_id, order_no);\nALTER TABLE orders_3 DROP INDEX uk_order_no,\n  ADD UNIQUE KEY uk_user_order_no (user_id, order_no);"
+        },
+        {
+          "title": "全量迁移：先灌历史数据",
+          "detail": "按分片键把老表数据灌进 4 张新表。生产上大表不能一条 INSERT 全灌，要分批（按主键区间每次 1 万行）避免大事务和长时间锁；这里用过滤条件模拟分批。迁移期间老表仍在提供服务。",
+          "sql": "INSERT INTO orders_0 SELECT * FROM orders WHERE user_id % 4 = 0;\nINSERT INTO orders_1 SELECT * FROM orders WHERE user_id % 4 = 1;\nINSERT INTO orders_2 SELECT * FROM orders WHERE user_id % 4 = 2;\nINSERT INTO orders_3 SELECT * FROM orders WHERE user_id % 4 = 3;\n\n-- 分批迁移的写法（生产用）\n-- INSERT INTO orders_0 SELECT * FROM orders\n-- WHERE user_id % 4 = 0 AND id BETWEEN 1 AND 10000;"
+        },
+        {
+          "title": "增量追平：双写 + 位点补偿",
+          "detail": "全量灌完后老表还在写。方案是双写：新写入同时写老表和新分片表，用事务或消息保证不丢；历史区间由 binlog 回放补偿。等校验一致后，停双写、切换读流量、老表改名留作回滚。",
+          "sql": "-- 双写阶段：同一次下单写两张表（同一事务内，或由 binlog 同步任务保证）\nSTART TRANSACTION;\nINSERT INTO orders (order_no, user_id, status, total_amount)\nVALUES ('ORD202611100999', 12345, 0, 299.00);\nINSERT INTO orders_1 (order_no, user_id, status, total_amount)\nVALUES ('ORD202611100999', 12345, 0, 299.00);\nCOMMIT;\n\nSELECT * FROM orders_1 WHERE order_no = 'ORD202611100999';"
+        },
+        {
+          "title": "一致性校验：行数与金额都要对",
+          "detail": "迁移最怕「看起来成功、实际少了一批」。必须做两级校验：总行数、总金额（分片汇总 = 老表），再抽查边界数据。校验通过前绝不切流量。",
+          "sql": "SELECT\n  (SELECT COUNT(*) FROM orders) AS old_cnt,\n  (SELECT COUNT(*) FROM orders_0)\n  + (SELECT COUNT(*) FROM orders_1)\n  + (SELECT COUNT(*) FROM orders_2)\n  + (SELECT COUNT(*) FROM orders_3) AS new_cnt;\n\nSELECT\n  (SELECT COALESCE(SUM(total_amount), 0) FROM orders) AS old_sum,\n  (SELECT COALESCE(SUM(total_amount), 0) FROM orders_0)\n  + (SELECT COALESCE(SUM(total_amount), 0) FROM orders_1)\n  + (SELECT COALESCE(SUM(total_amount), 0) FROM orders_2)\n  + (SELECT COALESCE(SUM(total_amount), 0) FROM orders_3) AS new_sum;"
+        },
+        {
+          "title": "切换与回滚：保留老表",
+          "detail": "校验一致后，把读写切到分片表（由中间件或 DAL 层路由），老表改名 orders_bak 保留 7~30 天。一旦新链路出问题，改路由回老表即可秒级回滚。切换窗口尽量选低峰，并提前演练一次。",
+          "sql": "-- 切换：老表改名为备份表（保留回滚能力）\nRENAME TABLE orders TO orders_bak;\n\n-- 回滚（新链路异常时执行）\nRENAME TABLE orders_bak TO orders;\n\n-- 确认各分片数据量与老表一致\nSELECT 'orders_0' AS shard, COUNT(*) AS cnt FROM orders_0\nUNION ALL SELECT 'orders_1', COUNT(*) FROM orders_1\nUNION ALL SELECT 'orders_2', COUNT(*) FROM orders_2\nUNION ALL SELECT 'orders_3', COUNT(*) FROM orders_3;"
+        }
+      ],
+      "deliverable": "一份分库分表迁移方案：分片键与路由规则、新表 DDL、分批迁移脚本、一致性校验 SQL、切换与回滚步骤、演练记录",
+      "checklist": [
+        "拆表前做过容量与增长评估，确认索引优化 / 归档无法解决",
+        "分片键选的是最高频查询维度，跨片查询比例可接受",
+        "全量迁移分批执行，没有大事务；增量阶段双写 + 位点补偿",
+        "行数与金额双口径校验一致，边界数据抽查通过",
+        "切换前演练过回滚，老表保留且可秒级切回",
+        "全局唯一 id、跨片分页、跨片 JOIN 的处理方案已明确"
+      ],
+      "pitfalls": [
+        "一上来就分库分表：索引没优化、数据没归档，先拆等于把复杂度放大，收益却很小。",
+        "分片键选错（比如按 created_at）：按用户查订单要扫全部分片，性能反而更差。",
+        "迁移用一条大 INSERT ... SELECT 且只校验行数：长事务、巨量 undo、主从延迟爆炸，行数对上但内容错位照样是事故。",
+        "切换后立刻删老表：新链路问题暴露需要时间，老表是唯一的回滚路径。"
+      ],
+      "pageIds": [
+        "sharding",
+        "sharding-middleware",
+        "migration",
+        "capacity-planning",
+        "online-ddl"
+      ]
+    }
+  ]
+}

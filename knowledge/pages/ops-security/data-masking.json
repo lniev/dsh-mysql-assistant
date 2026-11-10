@@ -1,0 +1,70 @@
+{
+  "id": "data-masking",
+  "titleZh": "敏感数据脱敏与加密",
+  "title": "Data masking",
+  "chapter": "ops-security",
+  "difficulty": 3,
+  "minutes": 12,
+  "summary": "脱敏就是给敏感信息打码：手机号中间四位变星号，身份证只留头尾。客服能核对身份却看不到完整号码，研发查问题时也不会把用户隐私带走。存的时候还可以加密，让拿到备份文件的人也解不开——这就是「展示脱敏 + 存储加密」两层防护。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "脱敏分两种：一种是「查出来给人看时打码」，数据本身没变；另一种是「存的时候加密或哈希」，落盘就是密文。前者防内部人员顺手偷看，后者防数据库或备份文件被拖走。两种往往一起用。"
+    },
+    {
+      "heading": "什么时候用哪种",
+      "text": "手机号、身份证、地址这类既要核对又不该完整展示的，查询时打码；密码永远只存哈希（带盐 SHA2，或应用层 bcrypt），不要明文、不要可逆加密；银行卡这类需要部分回显的，可以加密存，展示时解密后再打码。"
+    },
+    {
+      "heading": "查询时怎么打码",
+      "text": "用 LEFT/RIGHT 取头尾，REPEAT 生成固定长度星号，再 CONCAT 拼起来。注意打码表达式不要写进 WHERE，否则这一列没法走索引；需要按原始值过滤时，用原始列过滤，只在 SELECT 里输出打码结果。"
+    },
+    {
+      "heading": "加密存储怎么做",
+      "text": "用 AES_ENCRYPT / AES_DECRYPT，加密列存 VARBINARY；密钥放密钥管理服务（KMS），不要和数据放在同一个库，更不要写进代码。加密列没法做范围查询和模糊查询，需要检索就另存一列哈希值或前缀。"
+    },
+    {
+      "heading": "测试库和导出",
+      "text": "从生产导数据到测试环境前先脱敏，别直接整库拷贝；给运营导报表时只给打码视图；导出文件加审批和有效期。很多泄密事故不是黑客攻击，而是测试库或 Excel 附件里躺着完整的用户信息。"
+    }
+  ],
+  "keyPoints": [
+    "展示脱敏防内部偷看，存储加密防拖库，两层要一起做。",
+    "密码只存带盐哈希，不要明文，也不要用可逆加密。",
+    "打码表达式别写进 WHERE，否则索引失效，过滤用原始列。",
+    "加密列无法范围查询，需要检索就单独存哈希列或前缀列。",
+    "加密密钥放 KMS，不能和密文在同一个库或代码里。",
+    "测试库、导出文件、报表附件都是常见的泄密出口，要脱敏。"
+  ],
+  "snippets": [
+    {
+      "title": "查询时给手机号和身份证打码",
+      "lang": "sql",
+      "code": "SELECT id,\n       CONCAT(LEFT(phone, 3), '****', RIGHT(phone, 4)) AS phone_masked,\n       CONCAT(LEFT(id_card, 6), REPEAT('*', 8), RIGHT(id_card, 4)) AS id_card_masked\nFROM users\nWHERE city = '上海'\nLIMIT 50;"
+    },
+    {
+      "title": "加密写入与按主键解密读取",
+      "lang": "sql",
+      "code": "SET @key = 'prod-key-2026-01';\nUPDATE users SET phone_enc = AES_ENCRYPT(phone, @key) WHERE id = 1;\nSELECT id, CAST(AES_DECRYPT(phone_enc, @key) AS CHAR) AS phone\nFROM users\nWHERE id = 1;"
+    },
+    {
+      "title": "给报表账号只暴露脱敏视图",
+      "lang": "sql",
+      "code": "CREATE VIEW v_user_safe AS\nSELECT id,\n       name,\n       CONCAT(LEFT(phone, 3), '****', RIGHT(phone, 4)) AS phone,\n       city\nFROM users;\nGRANT SELECT ON shop.v_user_safe TO 'report_ro'@'10.0.9.%';"
+    }
+  ],
+  "pitfalls": [
+    "只在前端页面打码，接口照样返回完整手机号：抓个包就拿到明文，必须在服务端或视图层处理。",
+    "用 MD5 存密码：彩虹表能秒破，密码要用带盐的 SHA2 或应用层 bcrypt / argon2。",
+    "把加密密钥和密文放同一个库，甚至写在代码注释里：拖库等于全拿，密钥必须独立管理。",
+    "在打码表达式上做过滤（WHERE CONCAT(...) = ...）：索引失效，过滤请使用原始列或哈希列。"
+  ],
+  "enterprise": "先做字段分级（手机号、身份证、银行卡、地址、支付信息），再定展示规则和保留期限。生产导出、测试库灌数、客服后台统一走脱敏视图；加密列单独设计检索方案（哈希列或前缀列）；密钥放 KMS 并定期轮换；脱敏规则纳入上线检查清单。",
+  "related": [
+    "user-privileges",
+    "audit",
+    "sql-injection",
+    "json-type",
+    "data-types"
+  ]
+}

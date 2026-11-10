@@ -1,0 +1,70 @@
+{
+  "id": "ecommerce-schema",
+  "titleZh": "电商核心表设计",
+  "title": "E-commerce schema",
+  "chapter": "enterprise",
+  "difficulty": 4,
+  "minutes": 20,
+  "summary": "电商后台的几张核心表，就像一家店的会员册、货架、账本和收银台：users 是会员，products 是货架，orders 是账本，order_items 是账本明细，payments 是收款记录，inventory 是实际库存。设计得好，对账、查订单、做报表都顺；设计错了，商品改个价历史订单金额就跟着变，用户和客服会一起找你。",
+  "sections": [
+    {
+      "heading": "先把业务讲清楚",
+      "text": "用户下单买商品，生成一笔订单，订单里有多件商品；支付可能分多次（先定金后尾款）；商品可以下架，但库存要单独扣减。所以订单和商品、订单和库存必须拆成不同的表。不拆，改一个商品名称会把历史订单全改掉，这在电商里是事故。"
+    },
+    {
+      "heading": "每张表负责什么",
+      "text": "orders 存交易头部：谁、什么时候、总金额、状态；order_items 存明细：买什么、下单时单价、数量；payments 存收款流水；inventory 存可售库存。订单金额和商品名都以 order_items 里的快照为准，不要回头 JOIN products 取当前值。"
+    },
+    {
+      "heading": "金额、状态与订单号",
+      "text": "金额一律 DECIMAL(10,2)，不要用 FLOAT/DOUBLE，否则 0.1+0.2 能给你算出误差；状态用 TINYINT 加状态机，不要用字符串随手改；时间统一用 DATETIME；订单号独立生成，别拿自增 id 当对外单号，否则竞对能算出你一天多少单，还能遍历接口查别人订单。"
+    },
+    {
+      "heading": "索引和外键",
+      "text": "高频查询是「我的订单」「待发货订单」「某天 GMV」，所以建 (user_id, created_at)、(status, created_at) 这类联合索引。互联网场景外键常由应用保证，但 order_items.order_id 一定得有索引，否则按订单查明细每次都在扫全表。"
+    },
+    {
+      "heading": "为以后留余地",
+      "text": "用户维度分库分表时把 user_id 作为分片键；订单号里带日期和用户信息，长度固定方便索引；大字段（商品描述、图片）不要放订单表；订单表只增不删，历史数据靠归档和冷热分离，而不是 DELETE。"
+    }
+  ],
+  "keyPoints": [
+    "金额存 DECIMAL(10,2)，绝对不用 FLOAT/DOUBLE。",
+    "order_items 存商品名和下单时单价，这是历史快照，不能 JOIN 当前商品表取价。",
+    "订单号独立生成，不用自增 id 当对外单号。",
+    "状态用 TINYINT 加状态机，只有合法流转才能 UPDATE。",
+    "orders.total_amount 是冗余字段，要定期和明细合计对账。",
+    "高频查询建联合索引：(user_id, created_at)、(status, created_at)。"
+  ],
+  "snippets": [
+    {
+      "title": "订单表和订单明细表",
+      "lang": "sql",
+      "code": "CREATE TABLE orders (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  order_no CHAR(20) NOT NULL,\n  user_id BIGINT UNSIGNED NOT NULL,\n  status TINYINT NOT NULL DEFAULT 0 COMMENT '0待支付 1已支付 2已发货 3已完成 4已关闭',\n  total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id),\n  UNIQUE KEY uk_order_no (order_no),\n  KEY idx_user_created (user_id, created_at),\n  KEY idx_status_created (status, created_at)\n) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;\n\nCREATE TABLE order_items (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  order_id BIGINT UNSIGNED NOT NULL,\n  product_id BIGINT UNSIGNED NOT NULL,\n  product_name VARCHAR(128) NOT NULL,\n  unit_price DECIMAL(10,2) NOT NULL,\n  quantity INT NOT NULL,\n  PRIMARY KEY (id),\n  KEY idx_order (order_id),\n  KEY idx_product (product_id)\n) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;"
+    },
+    {
+      "title": "下单：订单头和明细在同一个事务里写",
+      "lang": "sql",
+      "code": "START TRANSACTION;\nINSERT INTO orders (order_no, user_id, status, total_amount)\nVALUES ('20261110000001', 1001, 0, 199.00);\nINSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity)\nVALUES (LAST_INSERT_ID(), 501, '机械键盘', 199.00, 1);\nCOMMIT;"
+    },
+    {
+      "title": "对账：订单总额和明细合计不一致的订单",
+      "lang": "sql",
+      "code": "SELECT o.id, o.order_no, o.total_amount, SUM(i.unit_price * i.quantity) AS items_total\nFROM orders o\nJOIN order_items i ON i.order_id = o.id\nGROUP BY o.id, o.order_no, o.total_amount\nHAVING o.total_amount <> items_total;"
+    }
+  ],
+  "pitfalls": [
+    "金额用 FLOAT：0.1 加 0.2 算出来不是 0.3，对账永远差几分钱，必须用 DECIMAL。",
+    "订单明细只存 product_id，展示时 JOIN 商品表取名字和价格：商品改价或下架后历史订单全变，要存快照。",
+    "订单头和明细不在同一个事务里写：出现只有订单没有明细的脏数据，发货和对账都会卡住。",
+    "用自增 id 直接当订单号：单量泄漏、单号可猜，还能被刷接口遍历，对外单号必须单独生成。"
+  ],
+  "enterprise": "核心交易表先分清「哪些字段是快照、哪些实时读」：金额、单价、商品名、收货地址都快照，库存和商品状态才实时读。订单号用「日期 + 用户尾号 + 序列/随机」生成，长度固定方便索引。上线后跑定时对账，把总额和明细不一致的订单告警出来。",
+  "related": [
+    "inventory-oversell",
+    "order-idempotency",
+    "decimal-money",
+    "primary-key",
+    "foreign-key"
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "id": "composite-index",
+  "titleZh": "联合索引与最左前缀",
+  "title": "Composite index",
+  "chapter": "index",
+  "difficulty": 3,
+  "minutes": 18,
+  "summary": "联合索引就是把书按「先分类、再作者、再年份」三级排序做的目录，顺序先定死。这样查某分类下某个作者的书很快，但只按作者查就找不到——这就是最左前缀原则：从最左列开始、连续地用，跳过第一列后面全用不上。设计联合索引的本质，是决定排序顺序。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "联合索引（composite index）是一次给多列建索引，比如 (user_id, status, created_at)。它相当于先按 user_id 排序，user_id 相同再按 status 排序，还相同再按 created_at 排序。只要条件从最左列开始连续匹配，就能顺着这个顺序快速定位。"
+    },
+    {
+      "heading": "最左前缀到底怎么用",
+      "text": "对 (user_id, status, created_at)：WHERE user_id = 1 能用；WHERE user_id = 1 AND status = 'paid' 能用两列；三列都用能用三列。但 WHERE status = 'paid' 单独用不了，WHERE user_id = 1 AND created_at > '...' 只能用到 user_id，中间断了顺序就接不上。"
+    },
+    {
+      "heading": "范围查询会截断后面的列",
+      "text": "一旦某一列用了范围条件（>、<、BETWEEN、LIKE 'x%'），它后面的列就不能再用于索引定位，只能靠回表后过滤。所以设计顺序时，把等值过滤的列放前面、范围列和排序列放后面，能多命中一列就多降一次扫描量。"
+    },
+    {
+      "heading": "怎么决定谁在前",
+      "text": "先看哪些列总是等值出现，等值列往左放；再看 ORDER BY 的列，把它放在范围列之前可以利用索引顺序避免排序。如果查询模式有很多种，就按「最常用、过滤性最强」的组合建索引，别为了覆盖所有组合建一堆联合索引。"
+    }
+  ],
+  "keyPoints": [
+    "联合索引按列顺序逐级排序，生效必须从最左列开始连续匹配。",
+    "跳过最左列、或中间断档，后面的列就用不上索引定位。",
+    "范围条件之后的列无法继续用于索引定位。",
+    "等值条件列放前面，排序列放在范围列之前可避免额外排序。",
+    "一个设计良好的联合索引，常常能顶替几个单列索引。"
+  ],
+  "snippets": [
+    {
+      "title": "建联合索引并验证最左前缀",
+      "lang": "sql",
+      "code": "ALTER TABLE orders ADD INDEX idx_user_status_created (user_id, status, created_at);\n\n-- 三列全用上\nEXPLAIN SELECT id, total_amount FROM orders\nWHERE user_id = 1001 AND status = 'paid' AND created_at >= '2026-03-01';\n\n-- 跳过 user_id，索引用不上\nEXPLAIN SELECT id, total_amount FROM orders WHERE status = 'paid';"
+    },
+    {
+      "title": "利用索引顺序消除排序",
+      "lang": "sql",
+      "code": "EXPLAIN SELECT id, total_amount, created_at\nFROM orders\nWHERE user_id = 1001\nORDER BY created_at DESC\nLIMIT 20;"
+    }
+  ],
+  "pitfalls": [
+    "按 (a, b) 建的索引去查 b：以为能走索引，实际是全表扫描。",
+    "把范围列放在联合索引前面：后面的等值列全废，索引只能用到第一列。",
+    "同一组列建了 (a,b) 又建 (a)：后者是冗余索引，白占空间还拖慢写入。",
+    "以为列顺序无所谓、优化器会自动调：索引列顺序是建索引时定死的，查询条件顺序不影响，但索引顺序影响成败。"
+  ],
+  "enterprise": "企业里通常按真实查询语句设计联合索引：把 WHERE 等值列、ORDER BY 列、SELECT 列按「等值 → 排序 → 范围」的顺序排，一个索引服务一类查询。上线后通过慢查询和 performance_schema 观察索引使用情况，定期删除冗余索引。",
+  "related": ["index-design", "covering-index", "secondary-index", "btree-index", "explain"]
+}

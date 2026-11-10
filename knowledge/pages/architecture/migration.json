@@ -1,0 +1,58 @@
+{
+  "id": "migration",
+  "titleZh": "在线数据迁移",
+  "title": "Online migration",
+  "chapter": "architecture",
+  "difficulty": 4,
+  "minutes": 15,
+  "summary": "在线迁移是在不停机的情况下把数据从一个库搬到另一个库，比如换机房、上云、分库分表或者改表结构。难点从来不是怎么把数据拷过去，而是拷贝过程中业务还在写，怎么保证最后两边一致、切换瞬间不丢不重。标准打法是：全量拷贝、增量追平、校验、灰度切换、可回滚。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "像给营业中的店铺换仓库：新仓库先把现有货铺满（全量），再把每天的进出同步过去（增量），等新旧仓库数据一致，选一个人少的时刻换招牌（切换），换完还要对账，发现不对能马上换回来。"
+    },
+    {
+      "heading": "迁移的五个步骤",
+      "text": "第一步全量导入新库；第二步增量同步，用 Canal、Debezium 这类工具解析 binlog 持续追平；第三步数据校验，比行数、比 checksum、抽样比对关键字段；第四步灰度切换，先把读切到新库，再把写切过去；第五步观察和收尾，保留旧库一段时间作为回滚兜底。"
+    },
+    {
+      "heading": "双写方案怎么做",
+      "text": "应用同时写旧库和新库，读暂时以旧库为准。要处理双写失败：一般先写旧库成功再写新库，新库失败就进补偿队列重试；还要保证幂等，避免重试写重。等新库追平且校验通过，再把写切到新库、停止双写。双写期间任何一边出问题都要能快速退回单写。"
+    },
+    {
+      "heading": "改表结构类迁移",
+      "text": "给大表加字段、改索引，直接 ALTER TABLE 可能锁表很久。可以用 gh-ost 或 pt-online-schema-change：它们建影子表、把原表数据拷过去、用 binlog 或触发器同步增量，最后原子 RENAME 切换。业务基本无感，但要注意它们也依赖主键和足够的磁盘空间。"
+    },
+    {
+      "heading": "切换那一刻最关键",
+      "text": "先停写或短暂只读，确认增量已经追平（GTID 或位点一致），再改配置或 DNS 做原子切换。切换后监控错误率、延迟、数据校验结果，发现问题立刻回滚。回滚不是失败，没有回滚方案才是。"
+    }
+  ],
+  "keyPoints": [
+    "迁移等于全量加增量追平，再校验、灰度切换、保留回滚。",
+    "增量同步优先用 binlog 解析工具，避免触发器带来的额外写压力。",
+    "切换前必须做数据校验：行数、checksum、关键字段抽样。",
+    "大表改结构用 gh-ost 或 pt-online-schema-change，别直接 ALTER。",
+    "一定要准备回滚方案和切换后的观察窗口。"
+  ],
+  "snippets": [
+    {
+      "title": "影子表加原子改名（改表结构类迁移）",
+      "lang": "sql",
+      "code": "CREATE TABLE orders_new LIKE orders;\nALTER TABLE orders_new ADD COLUMN channel VARCHAR(16) NOT NULL DEFAULT 'app';\nINSERT INTO orders_new (id, user_id, status, total_amount, created_at, channel)\nSELECT id, user_id, status, total_amount, created_at, 'app' FROM orders;\nRENAME TABLE orders TO orders_old, orders_new TO orders;"
+    },
+    {
+      "title": "校验迁移前后数据一致",
+      "lang": "sql",
+      "code": "CHECKSUM TABLE orders;\nSELECT COUNT(*) AS rows, SUM(total_amount) AS total FROM orders;\n-- 在旧库和新库各执行一次，对比结果是否一致"
+    }
+  ],
+  "pitfalls": [
+    "只做全量拷贝，不停写也不做增量，切过去发现丢了一大段数据。",
+    "切换前不做校验，切完才发现新库少了几万行，只能回滚重来。",
+    "大表直接 ALTER TABLE，元数据锁把线上读写堵死几分钟。",
+    "没有回滚方案，切换失败只能硬着头皮修数据，故障时间被无限拉长。"
+  ],
+  "enterprise": "迁移项目要当成一次有截止时间的故障演练：提前在预发环境完整跑一遍全量、增量、切换、回滚，记录每一步耗时；生产切换放在低峰期，准备只读降级和快速回滚开关；上线后 24 小时内持续对账，确认无误再下线旧库。",
+  "related": ["backup-restore", "replication", "sharding", "binlog", "online-ddl"]
+}

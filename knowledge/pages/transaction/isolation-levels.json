@@ -1,0 +1,58 @@
+{
+  "id": "isolation-levels",
+  "titleZh": "隔离级别与三种读问题",
+  "title": "Isolation levels",
+  "chapter": "transaction",
+  "difficulty": 3,
+  "minutes": 18,
+  "summary": "很多人同时在改同一批数据，隔离级别决定「你什么时候能看到别人的改动」。可以想成多人同时编辑一份共享文档：有人改完还没保存（未提交），有人刚保存（已提交）。隔离越严越安全但越慢，越松越快却会出现脏读、不可重复读、幻读，你要知道自己在哪一档。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "隔离级别不是「不让别人改」，而是「你能看到别人改到哪一步」。它是一条规则线，真正实现靠的是两套工具：锁和 MVCC（多版本快照）。理解规则，才能解释为什么同一个查询在两个会话里结果不一样。"
+    },
+    {
+      "heading": "三种读问题，用订单讲清楚",
+      "text": "脏读：读到别人还没提交的改动，对方随后回滚，你拿到的就是一份根本不存在的「幽灵数据」。不可重复读：同一个事务里两次查同一行，结果不同，因为别人在中间提交了修改。幻读：同一个范围查两次，行数变了，像凭空多出来一行，通常是别人在范围里插入了新记录。"
+    },
+    {
+      "heading": "四个级别的区别",
+      "text": "READ UNCOMMITTED 几乎不隔离，会出现脏读，基本不用。READ COMMITTED 每条语句开始生成一个新快照，能看到别人刚提交的数据，解决脏读，是 Oracle、PostgreSQL 的默认值。REPEATABLE READ 事务开始时一个快照，整个事务复用，解决不可重复读，是 MySQL 默认值。SERIALIZABLE 读也加锁，最安全最慢。"
+    },
+    {
+      "heading": "为什么 MySQL 默认用 RR",
+      "text": "历史上 MySQL 的 statement 格式 binlog 在 READ COMMITTED 下会导致主从不一致，所以默认选了 REPEATABLE READ，并用间隙锁来防幻读。到今天这个默认值仍有意义：大多数业务希望一个事务里读到的数据前后一致。代价是范围锁更多，并发写入更容易互相等。"
+    },
+    {
+      "heading": "实际项目怎么选",
+      "text": "业务默认值就够用，关键是把事务写短。报表、后台查询、数据同步这类希望看到最新提交数据的场景可以调成 READ COMMITTED（不少互联网公司这么做，能减少间隙锁）。SERIALIZABLE 几乎只在特殊场景用。改级别一定要全链路统一：应用、中间件、主从都考虑。"
+    }
+  ],
+  "keyPoints": [
+    "隔离级别是「你能看到别人改动的范围」，不是「别人不能改」。",
+    "脏读只在 READ UNCOMMITTED 出现，RC 解决脏读，RR 解决不可重复读。",
+    "MySQL 默认 REPEATABLE READ，Oracle 默认 READ COMMITTED，经验别乱搬。",
+    "RR 下「快照读」看事务开始时的版本，「当前读」（FOR UPDATE、UPDATE）看最新数据。",
+    "改隔离级别要全链路一致，并且同步检查 binlog 格式与业务逻辑。"
+  ],
+  "snippets": [
+    {
+      "title": "查看并修改当前会话的隔离级别",
+      "lang": "sql",
+      "code": "SELECT @@transaction_isolation;\nSET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;\nSTART TRANSACTION;\nSELECT @@transaction_isolation;\nROLLBACK;"
+    },
+    {
+      "title": "RR 下单看报表事务结束后才看到最新提交",
+      "lang": "sql",
+      "code": "START TRANSACTION;\nSELECT status FROM orders WHERE id = 90001;\n-- 另一个会话此时把 status 改成 shipped 并提交\nSELECT status FROM orders WHERE id = 90001;  -- 本事务内仍是旧值\nCOMMIT;"
+    }
+  ],
+  "pitfalls": [
+    "把隔离级别和锁混为一谈：级别是规则，锁和 MVCC 才是实现手段。",
+    "只在测试库改成 READ COMMITTED，线上连接池初始化 SQL 又把它设回了默认值。",
+    "以为 RR 就完全没有幻读：快照读看到历史版本，当前读之间仍可能被别的事务插入。",
+    "RR 下先普通 SELECT 再 SELECT ... FOR UPDATE，两次结果不同，误以为数据错乱。"
+  ],
+  "enterprise": "大多数互联网业务用默认的 REPEATABLE READ 加短事务就够；把长事务治理好，比盲目调隔离级别更有效。若因间隙锁导致并发写入冲突，可评估切到 READ COMMITTED，但要同步检查 binlog 格式、主从一致性和依赖可重复读的业务代码，并做全链路回归。",
+  "related": ["acid", "mvcc", "gap-lock", "lock-types", "transaction-pitfalls"]
+}

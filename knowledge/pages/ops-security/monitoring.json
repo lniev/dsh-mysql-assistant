@@ -1,0 +1,70 @@
+{
+  "id": "monitoring",
+  "titleZh": "监控指标：连接数 / QPS / 慢查询",
+  "title": "Monitoring",
+  "chapter": "ops-security",
+  "difficulty": 2,
+  "minutes": 15,
+  "summary": "监控指标就是数据库的仪表盘：连接数看有多少人在排队，QPS 看每秒处理多少请求，慢查询看哪条 SQL 在拖后腿。出故障时先看这三个数，基本就能判断是「忙不过来」还是「某条 SQL 写坏了」。没有监控，故障只能等用户投诉才发现。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "把 MySQL 想成一家餐厅：Threads_connected 是在店里的人数，Threads_running 是正在点菜的人（真正在干活），QPS 是每秒出菜数，慢查询是出得特别慢的那几道菜。三个一起看，才知道是客人太多还是厨房卡住了。"
+    },
+    {
+      "heading": "连接数看两个值",
+      "text": "Threads_connected 是当前连接数，接近 max_connections 就会报 Too many connections；Threads_running 是正在执行 SQL 的线程数，它突然飙升通常意味着锁等待或慢 SQL 堆积。再看 Max_used_connections，知道历史峰值有没有逼近上限。"
+    },
+    {
+      "heading": "QPS 和 TPS 怎么算",
+      "text": "QPS 用 Questions 的增量除以秒数，TPS 用 Com_commit 加 Com_rollback 的增量。注意不要直接看累计值，也不能只算「启动以来的平均值」——要按 1 分钟、5 分钟的窗口算增量，否则大促尖峰会被平均掉。"
+    },
+    {
+      "heading": "慢查询怎么盯",
+      "text": "打开 slow_query_log，long_query_time 设 1 秒左右，别设 10 秒。定期看 Slow_queries 计数的趋势，具体 SQL 从 mysql.slow_log 或慢日志文件里看。重点盯 rows_examined 远大于 rows_sent 的语句，那是索引没走好的典型信号。"
+    },
+    {
+      "heading": "再加几个关键指标",
+      "text": "复制延迟（从库落后主库多少秒）、Innodb_row_lock_waits（行锁等待次数）、磁盘使用率、Buffer Pool 命中率，这几个能覆盖大部分隐性故障。告警阈值按自己的业务压测基线定，不要照抄网上的数字。"
+    }
+  ],
+  "keyPoints": [
+    "Threads_running 比 Threads_connected 更能说明「现在到底卡不卡」。",
+    "QPS 要用状态增量算，直接看累计值没有意义。",
+    "long_query_time 设 1 秒左右，设 10 秒会漏掉大量慢 SQL。",
+    "Max_used_connections 逼近 max_connections 的 80% 就该扩容或查连接池。",
+    "rows_examined 远大于 rows_sent，说明索引没走好。",
+    "复制延迟和锁等待也要告警，只看 QPS 会漏掉很多故障。"
+  ],
+  "snippets": [
+    {
+      "title": "一次查看关键状态指标",
+      "lang": "sql",
+      "code": "SHOW GLOBAL STATUS WHERE Variable_name IN (\n  'Threads_connected', 'Threads_running', 'Max_used_connections',\n  'Questions', 'Slow_queries', 'Aborted_connects',\n  'Innodb_row_lock_waits', 'Innodb_row_lock_time_avg'\n);"
+    },
+    {
+      "title": "估算平均 QPS",
+      "lang": "sql",
+      "code": "SELECT ROUND(\n         (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Questions')\n         / (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Uptime')\n       ) AS avg_qps_since_start;"
+    },
+    {
+      "title": "打开慢查询并查看最近记录",
+      "lang": "sql",
+      "code": "SET GLOBAL slow_query_log = ON;\nSET GLOBAL long_query_time = 1;\nSET GLOBAL log_output = 'TABLE';\nSELECT start_time, query_time, rows_sent, rows_examined, sql_text\nFROM mysql.slow_log\nORDER BY start_time DESC\nLIMIT 20;"
+    }
+  ],
+  "pitfalls": [
+    "只看平均 QPS：大促峰值被启动以来的平均值摊平，等告警时连接已经打满了，要按时间窗口算增量。",
+    "把 long_query_time 设成 10 秒：拖慢接口的 2 秒 SQL 全漏掉，慢查询日志就失去了意义。",
+    "只在大盘上看曲线、不设告警：没人盯着的面板等于没有监控，至少给连接数、慢查询数、复制延迟设阈值。",
+    "看到连接数高就盲目调大 max_connections：如果是慢 SQL 占着连接，调大只会让雪崩更晚、更猛。"
+  ],
+  "enterprise": "生产上至少配四类告警：连接数超过 max_connections 的 80%、Threads_running 持续超过 CPU 核数、慢查询数突增、从库延迟超过 5 秒。指标接 Prometheus + mysqld_exporter，按实例打标签，故障时能一眼看到是哪个库。大促前压测记录基线，用基线判断异常。",
+  "related": [
+    "slow-query-log",
+    "explain",
+    "connection-pool",
+    "config-tuning",
+    "replication"
+  ]
+}

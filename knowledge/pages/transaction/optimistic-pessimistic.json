@@ -1,0 +1,63 @@
+{
+  "id": "optimistic-pessimistic",
+  "titleZh": "乐观锁与悲观锁",
+  "title": "Optimistic & pessimistic locking",
+  "chapter": "transaction",
+  "difficulty": 3,
+  "minutes": 15,
+  "summary": "悲观锁是「先占座再办事」：改之前先把行锁住，别人只能排队等。乐观锁是「先办事，提交时再看有没有人动过」：用版本号或条件更新做最后校验。一个简单但并发差，一个并发好但冲突多时要重试。选哪个，取决于你的数据是「抢的人多」还是「偶尔撞一次」。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "悲观锁像去餐厅先占座再点菜，座位没空就只能等；乐观锁像网上买票，先选座下单，最后确认时如果票已经被别人买走，再退回来重选。两种思路没有绝对的好坏，只看你的数据被争抢得有多厉害。"
+    },
+    {
+      "heading": "悲观锁怎么写",
+      "text": "事务里先 SELECT ... FOR UPDATE 把行锁住，再判断、再 UPDATE，最后 COMMIT。适合写多、冲突高的场景，比如库存扣减、账户余额变更。关键点有两个：必须在事务里，锁才持续到提交；WHERE 必须走索引，否则锁的是大量行甚至全表。"
+    },
+    {
+      "heading": "乐观锁怎么写",
+      "text": "给表加一个 version 列。读的时候把 version 一起读出来，更新时写 UPDATE ... SET 字段 = 新值, version = version + 1 WHERE id = ? AND version = 读到的值。影响行数为 1 说明抢到了，为 0 说明已经被别人改过，需要重读重试或者直接返回失败。"
+    },
+    {
+      "heading": "更轻的做法：带条件的原子更新",
+      "text": "很多场景不需要先读再改。一条 UPDATE inventory SET stock = stock - 1 WHERE product_id = 1001 AND stock >= 1 就够了：判断和写入在同一条语句里完成，由数据库保证原子性，影响行数为 0 就是库存不足。这是防超卖最常用、也最稳的写法。"
+    },
+    {
+      "heading": "怎么选",
+      "text": "冲突率高、临界区短，用悲观锁更直接；冲突低、能接受重试，用乐观锁并发更好。但同一热点行 QPS 上万的场景，两种锁都救不了，要靠拆库存、请求排队、消息串行化等手段把热点打散，再配合数据库的原子更新兜底。"
+    }
+  ],
+  "keyPoints": [
+    "悲观锁是先锁再用，乐观锁是最后校验失败就重试。",
+    "SELECT ... FOR UPDATE 必须在事务内且 WHERE 走索引，否则锁范围失控。",
+    "「先查再改」两步在并发下必然可能超卖，应改成一条带条件的 UPDATE。",
+    "乐观锁靠 version 或条件判断，影响行数为 0 就是冲突信号。",
+    "极端热点行靠换锁类型解决不了，要改数据结构和请求模型。"
+  ],
+  "snippets": [
+    {
+      "title": "悲观锁：先锁行再判断",
+      "lang": "sql",
+      "code": "START TRANSACTION;\nSELECT stock FROM inventory WHERE product_id = 1001 FOR UPDATE;\nUPDATE inventory SET stock = stock - 1 WHERE product_id = 1001 AND stock >= 1;\nCOMMIT;"
+    },
+    {
+      "title": "乐观锁：版本号加条件更新",
+      "lang": "sql",
+      "code": "-- 假设 products 表有 version 字段\nUPDATE products\nSET price = 199.00, version = version + 1\nWHERE id = 1001 AND version = 7;\n-- 影响行数为 0 表示这行已被别人改过，需要重新读取后重试"
+    },
+    {
+      "title": "最轻的乐观：一条 SQL 扣库存",
+      "lang": "sql",
+      "code": "UPDATE inventory\nSET stock = stock - 1\nWHERE product_id = 1001 AND stock >= 1;\n-- 影响行数为 0 说明库存不足或已经被抢完"
+    }
+  ],
+  "pitfalls": [
+    "先 SELECT 查库存再判断再 UPDATE，两步之间别人也能扣，结果超卖。",
+    "FOR UPDATE 忘了放在事务里，autocommit 下锁立即释放，等于没加锁。",
+    "乐观锁重试写成死循环，冲突高峰把数据库压垮；要限制次数并加退避。",
+    "UPDATE 用非索引条件，行锁变全表锁，悲观锁把并发直接降到 1。"
+  ],
+  "enterprise": "秒杀和库存扣减用「一条带条件的 UPDATE」最稳；账户余额这类临界区短、冲突高的操作可以用 FOR UPDATE。对同一行 QPS 上万的场景（红包、热门商品），要靠拆分库存、请求排队、Redis 预扣把热点打散，而不是只换锁类型。",
+  "related": ["lock-types", "deadlock", "inventory-oversell", "acid", "hot-account"]
+}

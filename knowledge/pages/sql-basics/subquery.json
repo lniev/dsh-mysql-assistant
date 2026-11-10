@@ -1,0 +1,69 @@
+{
+  "id": "subquery",
+  "titleZh": "子查询：查询里套查询",
+  "title": "Subqueries",
+  "chapter": "sql-basics",
+  "difficulty": 3,
+  "minutes": 15,
+  "summary": "子查询是「查询里再套查询」：像先问人事要一份「北京同事名单」，再拿名单去食堂查这些人的餐补。子查询先算出一个结果，外层再拿它当条件。它能替代很多 join，但写不好会慢得离谱。",
+  "sections": [
+    {
+      "heading": "一句话理解：查询里套查询",
+      "text": "子查询是写在括号里的 SELECT，按返回结果分三种：标量子查询返回一个值（可以当常量用）、列子查询返回一列（配 IN、ANY、ALL）、表子查询返回多行多列（当临时表用，放在 FROM 后面，必须起别名）。"
+    },
+    {
+      "heading": "常用位置",
+      "text": "WHERE 里：WHERE price > (SELECT AVG(price) FROM products)、WHERE id IN (SELECT ...)；FROM 里：FROM (SELECT ...) t 当派生表；SELECT 列表里也能放标量子查询，但每行执行一次，大表上极慢，能不用就不用。"
+    },
+    {
+      "heading": "IN、EXISTS、JOIN 怎么选",
+      "text": "IN 适合「小结果集里查」，语义直观；EXISTS 只关心有没有，适合大表；MySQL 8.0 会把很多子查询优化成半连接，性能和 JOIN 接近。但 NOT IN 遇到 NULL 会翻车，反连接优先用 NOT EXISTS 或 LEFT JOIN ... IS NULL。"
+    },
+    {
+      "heading": "相关子查询要小心",
+      "text": "引用了外层列的查询叫相关子查询，外层每行都要执行一次子查询，数据量一大就慢成 N+1。比如 SELECT 里写 (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id)，用户有多少行就执行多少次。"
+    },
+    {
+      "heading": "8.0 的替代：CTE 和窗口函数",
+      "text": "WITH 子句（CTE）可以把多层嵌套拆成有名字的步骤，可读性大幅提升；窗口函数能替代很多「取每组 TopN」的子查询。不是子查询不能用，而是能拆清楚的时候就拆清楚，半年后你还要改它。"
+    }
+  ],
+  "keyPoints": [
+    "子查询是括号里的 SELECT，按返回结果分为标量、列、表三种。",
+    "标量子查询可以当值用，但返回多行会报 Subquery returns more than 1 row。",
+    "SELECT 列表里的标量子查询按外层每行执行一次，大表极慢。",
+    "NOT IN 加子查询遇到 NULL 会返回空，改用 NOT EXISTS。",
+    "派生表（FROM 后面的子查询）必须起别名。",
+    "8.0 可以用 WITH 和窗口函数替代多层嵌套，提升可读性。"
+  ],
+  "snippets": [
+    {
+      "title": "价格高于平均价",
+      "lang": "sql",
+      "code": "SELECT id, name, price\nFROM products\nWHERE price > (SELECT AVG(price) FROM products);"
+    },
+    {
+      "title": "用 EXISTS 找有大额订单的用户",
+      "lang": "sql",
+      "code": "SELECT u.id, u.name\nFROM users u\nWHERE EXISTS (\n  SELECT 1\n  FROM orders o\n  WHERE o.user_id = u.id\n    AND o.total_amount > 5000\n);"
+    },
+    {
+      "title": "用 CTE 把子查询拆开",
+      "lang": "sql",
+      "code": "WITH big_orders AS (\n  SELECT order_id\n  FROM payments\n  WHERE amount > 5000\n)\nSELECT o.id, o.user_id, o.total_amount\nFROM orders o\nJOIN big_orders b ON b.order_id = o.id;"
+    }
+  ],
+  "pitfalls": [
+    "NOT IN 子查询：列里只要有一个 NULL，整条查询返回空，改 NOT EXISTS。",
+    "在 SELECT 里写标量子查询做统计：每行执行一次，慢查询元凶。",
+    "派生表没起别名直接报错：FROM (SELECT ...) 后面必须跟别名。",
+    "用 = 接返回多行的子查询：直接报 Subquery returns more than 1 row。"
+  ],
+  "enterprise": "多层嵌套先改 CTE，提升可维护性和排查效率；性能敏感场景用 EXPLAIN 对比 join 与子查询，别凭直觉；报表里避免 SELECT 列表的标量子查询，把它改成 join 或预聚合；NOT IN 子查询统一替换成 NOT EXISTS 或反连接。",
+  "related": [
+    "join-inner",
+    "union",
+    "group-by",
+    "expressions-aliases"
+  ]
+}

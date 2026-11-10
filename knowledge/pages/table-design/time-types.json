@@ -1,0 +1,54 @@
+{
+  "id": "time-types",
+  "titleZh": "时间类型：DATETIME / TIMESTAMP",
+  "title": "Date & time types",
+  "chapter": "table-design",
+  "difficulty": 2,
+  "minutes": 12,
+  "summary": "时间字段就像给数据盖一个「什么时候发生的」邮戳：订单什么时候下单、库存什么时候更新都靠它。DATETIME 存你写进去的字面时间，TIMESTAMP 会按会话时区自动换算，两者选错，跨时区业务就可能出现订单时间差 8 小时的诡异现象。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "DATETIME 像一个没有时区的日历，你写 2026-03-01 10:00:00，取出来还是这个值；TIMESTAMP 则内部存 UTC 时间戳，读写时会按当前会话时区转换。所以存储和展示是否一致，取决于列类型和会话时区两个因素。"
+    },
+    {
+      "heading": "TIMESTAMP 的范围和自动更新",
+      "text": "TIMESTAMP 只能表示 1970-01-01 到 2038-01-19（4 字节，存在 2038 年问题）；DATETIME 能表示 1000 年到 9999 年，占 5 字节。两者都可以写 DEFAULT CURRENT_TIMESTAMP 和 ON UPDATE CURRENT_TIMESTAMP，用来记录创建时间和更新时间。"
+    },
+    {
+      "heading": "到底选哪个",
+      "text": "国内单一业务系统多数用 DATETIME，存业务所在时区的字面时间，最直观，也不怕 2038 问题。需要跨时区显示同一时刻（比如国际化系统）可以考虑 TIMESTAMP，但要保证所有连接和服务器时区设置一致，否则同一个时间在不同会话里读出来不一样。"
+    },
+    {
+      "heading": "别把时间存成字符串",
+      "text": "用 VARCHAR 存 '2026-03-01 10:00:00' 能写进去，但比较、范围查询、日期函数都要反复转换，还容易混进格式不一致的脏数据。真需要精确到毫秒或微秒，用 DATETIME(3) 或 DATETIME(6)，而不是换成长字符串。"
+    }
+  ],
+  "keyPoints": [
+    "DATETIME 存字面时间、不跟时区走；TIMESTAMP 存 UTC、读写按会话时区换算。",
+    "TIMESTAMP 只到 2038 年，长期业务优先 DATETIME。",
+    "创建/更新时间用 DEFAULT CURRENT_TIMESTAMP 和 ON UPDATE CURRENT_TIMESTAMP。",
+    "时间列不要用 VARCHAR 存，排序和范围查询都会变形。",
+    "需要毫秒用 DATETIME(3)，需要微秒用 DATETIME(6)。"
+  ],
+  "snippets": [
+    {
+      "title": "创建时间与更新时间自动维护",
+      "lang": "sql",
+      "code": "CREATE TABLE inventory (\n  product_id BIGINT UNSIGNED NOT NULL,\n  stock INT NOT NULL DEFAULT 0,\n  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (product_id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+    },
+    {
+      "title": "按时间范围查最近 7 天的订单",
+      "lang": "sql",
+      "code": "SELECT id, user_id, total_amount, created_at\nFROM orders\nWHERE created_at >= NOW() - INTERVAL 7 DAY\nORDER BY created_at DESC;"
+    }
+  ],
+  "pitfalls": [
+    "用 INT 存 Unix 秒：查询时要 FROM_UNIXTIME 转换，范围条件写起来别扭，还容易忘乘 1000。",
+    "服务器时区是 UTC、代码写入的是本地字符串，DATETIME 会原样保存，展示时又按本地解析，时间就错位了。",
+    "把 TIMESTAMP 当长期方案：2038-01-19 之后会溢出，老系统迁移数据库时要提前换成 DATETIME。",
+    "对时间列用函数再比较（DATE(created_at) = '2026-03-01'），索引会用不上，改成区间条件。"
+  ],
+  "enterprise": "企业里通常约定「业务时间用 DATETIME、服务器和数据库统一 UTC、应用层负责时区转换」，并把 created_at、updated_at 作为每张表的标配。分库分表和报表场景下，还要统一时间精度（秒还是毫秒），否则按天聚合时会出现对不齐的情况。",
+  "related": ["data-types", "create-table", "decimal-money", "index-failure"]
+}

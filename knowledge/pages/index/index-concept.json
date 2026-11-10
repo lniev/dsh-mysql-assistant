@@ -1,0 +1,54 @@
+{
+  "id": "index-concept",
+  "titleZh": "索引是什么：书的目录",
+  "title": "Indexes explained",
+  "chapter": "index",
+  "difficulty": 2,
+  "minutes": 12,
+  "summary": "索引就是数据库这本书的目录：想在 800 页里找「索引」这一节，先翻目录定位到第 120 页，再直接翻过去，比一页页翻快得多。MySQL 的索引也是一样，它把某一列的值排好序单独存一份，查询时先查这份「目录」拿到位置，再去找数据。没有索引，就只能全表扫描。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "建索引就是让数据库额外维护一份「排好序 + 带位置」的数据结构。查 user_id = 1001 时，它先在索引里二分找到 1001 所在的位置，再按位置把整行取出来。索引不改变表里数据的顺序，只是多了一本方便翻的目录。"
+    },
+    {
+      "heading": "没有索引会怎样",
+      "text": "MySQL 只能从第一行读到最后一行，这叫全表扫描（type=ALL）。10 万行的表还能忍，1000 万行的订单表一次查询就要读几秒，并发一高直接把数据库打满。EXPLAIN 输出里看到 type=ALL、rows 接近表总行数，基本就是缺索引的信号。"
+    },
+    {
+      "heading": "索引不是白拿的",
+      "text": "每建一个索引，都要多占一份磁盘空间，每写一行都要同步更新所有索引，插入和更新的开销会变大。所以不是越多越好：一个表通常控制在 5 个以内索引，优先给高频查询的 WHERE、ORDER BY、JOIN 条件建，写完再用 EXPLAIN 验证。"
+    },
+    {
+      "heading": "什么时候值得建",
+      "text": "看 WHERE 里长期出现、选择性又高的列。选择性 = 不重复值的比例，手机号、订单号几乎唯一，选择性高，索引效果好；性别只有两种取值，建了索引优化器也会觉得「扫一半行还不如全表」，通常不建。"
+    }
+  ],
+  "keyPoints": [
+    "索引 = 额外维护的排好序的数据结构，用来快速定位行。",
+    "没有索引时 MySQL 全表扫描，数据量一大就慢。",
+    "索引加速读、拖慢写、占用磁盘，不是越多越好。",
+    "优先给高选择性、高频出现在 WHERE/JOIN/ORDER BY 的列建索引。",
+    "建完索引要用 EXPLAIN 确认真的被用上了。"
+  ],
+  "snippets": [
+    {
+      "title": "建索引前后看执行计划",
+      "lang": "sql",
+      "code": "EXPLAIN SELECT id, total_amount, created_at\nFROM orders\nWHERE user_id = 1001;\n\nALTER TABLE orders ADD INDEX idx_user (user_id);\n\nEXPLAIN SELECT id, total_amount, created_at\nFROM orders\nWHERE user_id = 1001;"
+    },
+    {
+      "title": "看看表上已经有哪些索引",
+      "lang": "sql",
+      "code": "SHOW INDEX FROM orders;\nSELECT index_name, column_name, cardinality\nFROM information_schema.statistics\nWHERE table_schema = DATABASE() AND table_name = 'orders';"
+    }
+  ],
+  "pitfalls": [
+    "给每个列都建一个索引：写入要维护十几份索引，性能反而下降，还占空间。",
+    "在 WHERE 里对索引列做运算或套函数（WHERE user_id + 1 = 1002），索引直接失效。",
+    "以为建了索引就一定生效：用 EXPLAIN 看 key 列是不是真的命中了。",
+    "在性别、状态这类只有几个值的低选择性列上建单列索引，大概率还是全表扫。"
+  ],
+  "enterprise": "企业里索引变更要走评审和变更窗口：先在上线前用生产数据量的影子库跑 EXPLAIN，确认扫描行数从百万降到几十，再在低峰期用 Online DDL 或 gh-ost 加索引。上线后持续采集慢查询，定期清理几个月都没被用到的冗余索引。",
+  "related": ["btree-index", "clustered-index", "secondary-index", "explain", "index-design"]
+}

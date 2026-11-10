@@ -1,0 +1,58 @@
+{
+  "id": "mvcc",
+  "titleZh": "MVCC：读不加锁的秘密",
+  "title": "MVCC",
+  "chapter": "transaction",
+  "difficulty": 4,
+  "minutes": 18,
+  "summary": "MVCC 就是「多版本并发控制」：数据库给每行数据保留几个历史版本，读的时候挑一个你「该看到」的版本，于是读和写不用互相排队。你可以把它想成每个事务进店时拍了一张快照，之后看的都是快照里的旧账本，别人再改也影响不了你这次读。它让 MySQL 在默认级别下读不加锁、写也不会被读堵住。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "同一本账本，银行保留了昨天、今天、刚才的三个版本。你进门时拍一张快照，接下来只认快照里的数字；柜员继续在新版本上记账，谁也不影响谁。MVCC 就是让「读」永远读一个历史版本，从而不用加锁。"
+    },
+    {
+      "heading": "为什么需要它",
+      "text": "如果读也加锁，一个慢查询或者一次大批量导出就可能把整张表的写入全部堵住，电商的列表页、详情页会直接把数据库拖垮。MVCC 的承诺是：普通 SELECT 不阻塞写入，写入也不阻塞普通 SELECT，读多写少的业务才扛得住并发。"
+    },
+    {
+      "heading": "每个版本存在哪",
+      "text": "InnoDB 每行有两个隐藏字段：DB_TRX_ID（最后修改它的事务 id）和 DB_ROLL_PTR（指向 undo log 里的上一个版本）。改一行不是擦掉旧值，而是把旧值链进 undo log。事务开始时生成一个 read view，记录此刻还有哪些事务没提交，判断某个版本对当前事务是否可见。"
+    },
+    {
+      "heading": "RR 和 RC 的快照时机不同",
+      "text": "REPEATABLE READ 只在事务第一次快照读时生成 read view，之后整个事务复用它，所以两次读同一行结果一样。READ COMMITTED 每条语句都重新生成 read view，所以能看到别人刚提交的数据，但同一事务里两次读可能不一样。同一个机制，快照频率不同，就变成了两个隔离级别。"
+    },
+    {
+      "heading": "MVCC 的边界和代价",
+      "text": "只有普通 SELECT 走快照；UPDATE、DELETE、SELECT ... FOR UPDATE 是当前读，看最新数据并加锁，所以扣库存不能只靠 MVCC。旧版本由 purge 线程清理，长事务会让旧版本一直清不掉，undo 表空间膨胀、查询变慢，这是长事务最隐蔽的伤害。"
+    }
+  ],
+  "keyPoints": [
+    "MVCC 让普通 SELECT 不加锁，靠 undo log 里的历史版本实现。",
+    "每行有事务 id 和回滚指针两个隐藏字段，旧版本串成版本链。",
+    "RR 一个事务一个快照，RC 每条语句一个快照。",
+    "旧版本由 purge 线程清理，长事务会让它一直清不掉。",
+    "FOR UPDATE、UPDATE、DELETE 是当前读，不走快照。"
+  ],
+  "snippets": [
+    {
+      "title": "查当前有哪些长事务拖住旧版本",
+      "lang": "sql",
+      "code": "SELECT trx_id,\n       trx_state,\n       trx_started,\n       TIMESTAMPDIFF(SECOND, trx_started, NOW()) AS seconds,\n       trx_mysql_thread_id,\n       trx_query\nFROM information_schema.innodb_trx\nORDER BY trx_started\nLIMIT 10;"
+    },
+    {
+      "title": "RR 下快照读与当前读的差别",
+      "lang": "sql",
+      "code": "START TRANSACTION;\nSELECT stock FROM inventory WHERE product_id = 1001;          -- 快照读：看事务开始时的版本\nSELECT stock FROM inventory WHERE product_id = 1001 FOR UPDATE; -- 当前读：看最新值并加锁\nCOMMIT;"
+    }
+  ],
+  "pitfalls": [
+    "以为 MVCC 能解决所有并发问题：当前读不走快照，扣库存仍然要靠行锁或带条件更新。",
+    "长事务不提交，undo 版本越堆越多，磁盘暴涨、查询变慢，purge 也被卡住。",
+    "在 RR 事务里先普通 SELECT 再 FOR UPDATE，两次结果不同，误判为数据被回滚。",
+    "用 SELECT ... FOR UPDATE 做只读查询，白白加锁，把 MVCC 的优势扔掉了。"
+  ],
+  "enterprise": "列表页、详情页这类读多写少的查询靠 MVCC 免锁，是 MySQL 能扛高并发的关键。但一定要盯住长事务：监控 innodb_trx 里超过 5 秒的事务并推动业务尽快提交，否则 undo 膨胀会拖垮整个实例；报表类大查询尽量走从库或离线库。",
+  "related": ["isolation-levels", "undo-redo-log", "lock-types", "transaction-pitfalls", "acid"]
+}

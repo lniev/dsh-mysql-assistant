@@ -1,0 +1,69 @@
+{
+  "id": "user-privileges",
+  "titleZh": "账号与最小权限",
+  "title": "Users & privileges",
+  "chapter": "ops-security",
+  "difficulty": 2,
+  "minutes": 12,
+  "summary": "数据库账号就像公司的门禁卡：不同的人只能刷开自己该进的房间。给应用一个只够增删改查的账号，给报表一个只能读的账号，万一代码写错或密码泄漏，损失也被权限这把锁限制住。反过来，所有服务共用一个 root，等于把整栋楼的钥匙挂在门口。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "账号 = 用户名 + 来源主机 + 密码；权限 = 这个账号能在哪些库、哪些表上做哪些动作。MySQL 默认全部拒绝，只放行你显式 GRANT 过的动作。所以权限给得越小，账号被滥用时能造成的破坏就越小。"
+    },
+    {
+      "heading": "为什么要最小权限",
+      "text": "真实事故：一个上线脚本连错了库，带着应用账号把订单表全量删了，因为那个账号有 DELETE 权限。如果应用账号只有业务需要的 INSERT/UPDATE，脚本根本删不动。同理，SQL 注入拿到连接后，也只能做账号被允许的事。"
+    },
+    {
+      "heading": "怎么创建和授权",
+      "text": "用 CREATE USER 建账号，host 写清来源网段，别图省事写 %。再用 GRANT 只授予具体库表的动作。CREATE USER / GRANT 执行完立即生效，不需要 FLUSH PRIVILEGES；只有直接改 mysql.user 表才需要刷新权限。"
+    },
+    {
+      "heading": "三类账号分开用",
+      "text": "应用读写账号：只给业务表的 SELECT/INSERT/UPDATE/DELETE；报表只读账号：只给 SELECT，并连到从库；运维管理账号：DDL、备份、参数调整，人工使用并留审计。每个账号一个用途，出事时才能从账号定位到服务。"
+    },
+    {
+      "heading": "定期检查与回收",
+      "text": "用 SHOW GRANTS FOR 账号逐条核对；服务下线、人员离职当天删号；密码放配置中心或密钥管理服务，不进 git；顺手检查有没有匿名账号、有没有 % 主机授权。建议每季度把账号清单和 mysql.user 对一遍。"
+    }
+  ],
+  "keyPoints": [
+    "MySQL 默认拒绝，只放行 GRANT 过的动作。",
+    "应用账号只给业务表的 SELECT/INSERT/UPDATE/DELETE，不给 DROP，更不给 *.*。",
+    "账号写成 名字@来源网段，限制能连的机器，别用 %。",
+    "应用不要用 root，否则慢查询、误操作都分不清是谁干的。",
+    "密码放配置中心或密钥管理，不进代码仓库。",
+    "每季度 SHOW GRANTS 审计一次，服务下线立即删号。"
+  ],
+  "snippets": [
+    {
+      "title": "创建应用账号并最小授权",
+      "lang": "sql",
+      "code": "CREATE USER 'app_order'@'10.0.1.%' IDENTIFIED BY 'S3cure_App_2026!';\nGRANT SELECT, INSERT, UPDATE, DELETE ON shop.orders TO 'app_order'@'10.0.1.%';\nGRANT SELECT, INSERT, UPDATE, DELETE ON shop.order_items TO 'app_order'@'10.0.1.%';\nGRANT SELECT ON shop.products TO 'app_order'@'10.0.1.%';"
+    },
+    {
+      "title": "给报表一个只读账号",
+      "lang": "sql",
+      "code": "CREATE USER 'report_ro'@'10.0.9.%' IDENTIFIED BY 'R3port_Ro_2026!';\nGRANT SELECT ON shop.* TO 'report_ro'@'10.0.9.%';"
+    },
+    {
+      "title": "查看并回收权限",
+      "lang": "sql",
+      "code": "SHOW GRANTS FOR 'app_order'@'10.0.1.%';\nREVOKE DELETE ON shop.orders FROM 'app_order'@'10.0.1.%';\nALTER USER 'app_order'@'10.0.1.%' IDENTIFIED BY 'N3w_Pass_2026!';"
+    }
+  ],
+  "pitfalls": [
+    "图省事把 root 账号密码写进应用配置：服务被攻破或配置泄漏时整个实例都危险，每个服务应使用独立的最小权限账号。",
+    "GRANT ALL ON *.* TO 应用账号@'%': 权限过大且任何机器都能连；至少限制来源网段，只给需要的库表。",
+    "授权后顺手 FLUSH PRIVILEGES：CREATE USER / GRANT 本身立即生效，只有直接修改 mysql.user 表才需要刷新。",
+    "只建号不回收：服务下线、人员离职后老账号成了后门，定期用 SHOW GRANTS 和 mysql.user 清单核对。"
+  ],
+  "enterprise": "生产环境至少分应用读写、报表只读、运维管理三类账号，权限按库表收窄，来源按网段限制。DDL 权限只给发布账号，日常应用账号连建表都不允许。账号清单纳入配置管理和季度审计，人员离职、服务下线当天回收权限。",
+  "related": [
+    "sql-injection",
+    "audit",
+    "data-masking",
+    "connection-pool"
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "id": "decimal-money",
+  "titleZh": "DECIMAL 与金额存储",
+  "title": "DECIMAL for money",
+  "chapter": "table-design",
+  "difficulty": 2,
+  "minutes": 10,
+  "summary": "金额必须用 DECIMAL，不能碰 FLOAT 和 DOUBLE：后者是「近似」存储，就像用大概的尺子量布，0.1 加 0.2 可能给你 0.30000000000000004。DECIMAL 是精确的定点小数，存 19.90 就是 19.90，对账、退款、发票这些场景才不会差一分钱。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "浮点数（FLOAT/DOUBLE）在计算机里用二进制表示小数，很多十进制小数根本存不精确，只能存成很近似的值。DECIMAL 则是把整数部分和小数部分分开，按位精确存储，所以 0.1 + 0.2 的结果就是 0.3。涉及钱的字段一律用 DECIMAL。"
+    },
+    {
+      "heading": "DECIMAL(12,2) 到底什么意思",
+      "text": "括号里两个数：总位数和小数位数。DECIMAL(12,2) 表示一共 12 位数字，其中 2 位在小数点后，整数部分最多 10 位，最大值是 9999999999.99。做电商一般用 DECIMAL(12,2) 或 DECIMAL(14,2)，够存大额订单又不浪费空间。"
+    },
+    {
+      "heading": "运算和展示也要注意",
+      "text": "DECIMAL 参与计算时结果仍然是精确的，但和 DOUBLE 混算会被转成浮点，所以要保证两边都是 DECIMAL。展示时用 ROUND(amount, 2) 控制小数位，除法的结果位数由参数决定，最好显式指定精度，比如 CAST(total / 3 AS DECIMAL(12,2))。"
+    }
+  ],
+  "keyPoints": [
+    "金额字段用 DECIMAL，不用 FLOAT/DOUBLE。",
+    "DECIMAL(M,D)：M 是总位数，D 是小数位数，整数部分只有 M-D 位。",
+    "DECIMAL 默认是 DECIMAL(10,0)，不写小数为 0 会直接丢掉角分。",
+    "和浮点混算会被转成浮点，运算两边都用 DECIMAL。",
+    "展示层用 ROUND 或格式化，不在数据库里存多余小数位。"
+  ],
+  "snippets": [
+    {
+      "title": "浮点误差 vs 精确小数",
+      "lang": "sql",
+      "code": "SELECT 0.1 + 0.2 AS float_sum;\nSELECT CAST(0.1 AS DECIMAL(12,2)) + CAST(0.2 AS DECIMAL(12,2)) AS decimal_sum;"
+    },
+    {
+      "title": "支付表用 DECIMAL 存金额",
+      "lang": "sql",
+      "code": "CREATE TABLE payments (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  order_id BIGINT UNSIGNED NOT NULL,\n  method VARCHAR(16) NOT NULL,\n  amount DECIMAL(12,2) NOT NULL COMMENT '支付金额，元',\n  paid_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id),\n  KEY idx_order (order_id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+    }
+  ],
+  "pitfalls": [
+    "定义成 DECIMAL 却忘了写小数位：DECIMAL(10) 等价于 DECIMAL(10,0)，19.90 会变成 20。",
+    "用 DOUBLE 存价格再 SUM，几百条数据后总额可能对不上，报表和财务系统会产生争议。",
+    "把金额存成字符串：能存但没法直接 SUM，排序也会变成字典序，'9.9' 会排在 '10.0' 后面。",
+    "在代码里用 float 接收 DECIMAL 再计算，数据库精确、应用层又引入误差，整条链路要统一用 BigDecimal 之类。"
+  ],
+  "enterprise": "企业里金额字段、汇率、手续费、优惠券面额全部用 DECIMAL，并且统一单位（元还是分）写进设计文档。Java 侧用 BigDecimal，前端展示统一格式化，任何涉及金额的除法都显式指定精度和舍入规则，避免四舍五入方式不一致带来对账差异。",
+  "related": ["data-types", "create-table", "time-types", "ecommerce-schema"]
+}

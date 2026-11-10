@@ -1,0 +1,54 @@
+{
+  "id": "normalization",
+  "titleZh": "三范式与反范式（通俗版）",
+  "title": "Normalization",
+  "chapter": "table-design",
+  "difficulty": 3,
+  "minutes": 18,
+  "summary": "范式就是「一张表只讲一件事」的整理术：同一个信息只存一份，改的时候只改一处，避免出现两行数据互相矛盾。三范式像整理衣柜——上衣一格、裤子一格，别把袜子塞进西装口袋。但查询多了以后，适当反范式（冗余一点）能少 JOIN，本质是在「一致」和「快」之间做取舍。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "第一范式（1NF）要求每格只放一个值，不能一个字段里塞「1,2,3」；第二范式（2NF）要求非主键列完全依赖整个主键，不能只依赖复合主键的一部分；第三范式（3NF）要求非主键列之间不能互相推导，比如有了分类 id 就别再存分类名。"
+    },
+    {
+      "heading": "不符合范式会出什么事",
+      "text": "最典型的是冗余数据不一致：订单项里存了商品名，商品改名后老订单还显示旧名；或者用户表里存了城市名，城市改名要更新几十万行。还有插入异常（想记分类必须先有商品）和删除异常（删最后一条订单把客户信息也删了）。"
+    },
+    {
+      "heading": "什么时候该反范式",
+      "text": "报表、列表页、订单快照这类读多写少、且要求「当时的样子」的场景，适当冗余反而正确：订单项保存下单时的商品名和价格，是业务要求，不是设计失误。反范式的代价是要自己保证同步，通常靠事务里同时写两处，或订阅 binlog 异步补。"
+    },
+    {
+      "heading": "落地时的判断顺序",
+      "text": "先按三范式把表拆清楚，保证写入正确；再根据真实慢查询决定要不要冗余。别一上来就为了少 JOIN 到处冗余，因为一致性维护的成本往往比一次 JOIN 更高，而且出问题时很难查。"
+    }
+  ],
+  "keyPoints": [
+    "1NF：每列只放一个值，别在字段里存逗号分隔的列表。",
+    "2NF：非主键列要依赖完整主键，不能只依赖其中一部分。",
+    "3NF：非主键列之间不要有推导关系，能算出来的不要存。",
+    "范式解决的是数据重复和不一致，代价是查询要多 JOIN。",
+    "订单快照、报表宽表属于合理的反范式，要接受同步成本。"
+  ],
+  "snippets": [
+    {
+      "title": "符合三范式的订单结构",
+      "lang": "sql",
+      "code": "CREATE TABLE order_items (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  order_id BIGINT UNSIGNED NOT NULL,\n  product_id BIGINT UNSIGNED NOT NULL,\n  quantity INT NOT NULL DEFAULT 1,\n  unit_price DECIMAL(12,2) NOT NULL COMMENT '下单时单价快照',\n  PRIMARY KEY (id),\n  KEY idx_order (order_id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+    },
+    {
+      "title": "查询时用 JOIN 拼出商品名",
+      "lang": "sql",
+      "code": "SELECT oi.order_id, p.name, oi.quantity, oi.unit_price\nFROM order_items oi\nJOIN products p ON p.id = oi.product_id\nWHERE oi.order_id = 10001;"
+    }
+  ],
+  "pitfalls": [
+    "把多个值塞进一个字段：tags 存成 'a,b,c'，想查含 b 的记录只能 LIKE，索引用不上还没法保证唯一。",
+    "为了「查起来方便」在订单里冗余用户昵称：用户改名后订单显示旧昵称，被当成 bug 查半天。",
+    "反范式后没做同步机制：只写一处、另一处靠人工补，时间一长两边数据必然对不上。",
+    "把「反范式」当成不建索引的借口：JOIN 慢多半是缺索引，不是范式问题。"
+  ],
+  "enterprise": "企业设计文档里通常先给出符合三范式的表结构，再单独一节说明哪些字段是刻意冗余的、由谁负责同步、如何核对一致性。订单、支付这类核心表保留「下单快照」字段；用户画像、统计报表则用宽表或数仓异步生成，避免影响在线库。",
+  "related": ["create-table", "foreign-key", "json-type", "primary-key", "ecommerce-schema"]
+}

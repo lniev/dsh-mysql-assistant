@@ -1,0 +1,69 @@
+{
+  "id": "multi-tenant",
+  "titleZh": "多租户数据隔离",
+  "title": "Multi-tenant data",
+  "chapter": "enterprise",
+  "difficulty": 4,
+  "minutes": 15,
+  "summary": "多租户就是一套系统服务多家客户，每家的数据必须互相看不见。最怕的不是性能问题，而是「A 公司登录后看到了 B 公司的订单」——这是能让公司上新闻的事故。隔离方案从重到轻有三种：独立实例、独立库、共享表加 tenant_id，选哪种取决于预算、客户规模和合规要求。",
+  "sections": [
+    {
+      "heading": "先看事故怎么发生",
+      "text": "共享表方案里，某条查询忘了加 WHERE tenant_id = ?，接口就把全平台订单返回了；或者唯一键只建在订单号上，A 客户的单号和 B 客户撞了，直接覆盖数据。多租户的坑几乎都不是「不会写」，而是「漏写了一个条件」。"
+    },
+    {
+      "heading": "三种隔离方案对比",
+      "text": "独立实例最安全也最贵，适合大客户和金融客户；独立库（一租户一个 schema）折中，备份恢复能按租户做；共享表加 tenant_id 成本最低、密度最高，但每个查询都必须带租户条件，最考验代码纪律。很多产品是「共享起步，大客户迁移到独立库」。"
+    },
+    {
+      "heading": "共享表怎么防止漏条件",
+      "text": "统一在数据访问层注入租户条件，禁止业务代码裸写 SQL；关键接口用「租户视图 + 独立账号」再兜一层；写单元测试专门断言「不带 tenant_id 的查询不存在」；上线前做越权测试，用 A 租户的 token 查 B 租户的数据。"
+    },
+    {
+      "heading": "索引和唯一键要带租户",
+      "text": "所有联合索引把 tenant_id 放在最左边，否则每个租户的查询都在扫别人的数据；唯一键必须是 (tenant_id, 业务字段)，否则跨租户冲突；分库分表时 tenant_id 作为分片键，保证同一租户的数据落在同一片，查询不用跨片聚合。"
+    },
+    {
+      "heading": "租户级运维",
+      "text": "大客户数据量上来后可以单独迁到独立库（按 tenant_id 拆）；按租户统计存储和 QPS 做成本分摊；删除租户要走合规流程：数据导出、保留期、彻底删除，而不是一条 DELETE 了事。"
+    }
+  ],
+  "keyPoints": [
+    "多租户第一原则：任何查询、更新、删除都必须带 tenant_id 条件。",
+    "唯一键必须包含 tenant_id，否则不同租户的业务号会互相冲突。",
+    "索引把 tenant_id 放在最左边，保证租户内查询高效。",
+    "共享表方案要在数据访问层统一注入，再配视图/独立账号兜底。",
+    "大客户可以从共享库平滑迁到独立库。",
+    "租户越权要写进测试用例，上线前专门测「查别人的数据」。"
+  ],
+  "snippets": [
+    {
+      "title": "共享表：租户条件进唯一键和索引",
+      "lang": "sql",
+      "code": "CREATE TABLE t_order (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  tenant_id INT UNSIGNED NOT NULL,\n  order_no CHAR(20) NOT NULL,\n  user_id BIGINT UNSIGNED NOT NULL,\n  total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id),\n  UNIQUE KEY uk_tenant_order (tenant_id, order_no),\n  KEY idx_tenant_user_created (tenant_id, user_id, created_at)\n) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;"
+    },
+    {
+      "title": "给单个租户建视图和独立账号",
+      "lang": "sql",
+      "code": "CREATE VIEW v_order_tenant_42 AS\nSELECT * FROM t_order WHERE tenant_id = 42;\nCREATE USER 'tenant42_app'@'10.0.2.%' IDENTIFIED BY 'T3nant_42_2026!';\nGRANT SELECT, INSERT, UPDATE, DELETE ON shop.v_order_tenant_42 TO 'tenant42_app'@'10.0.2.%';"
+    },
+    {
+      "title": "按租户统计订单和 GMV",
+      "lang": "sql",
+      "code": "SELECT tenant_id,\n       COUNT(*) AS order_count,\n       SUM(total_amount) AS gmv\nFROM t_order\nWHERE created_at >= '2026-11-01'\nGROUP BY tenant_id\nORDER BY gmv DESC;"
+    }
+  ],
+  "pitfalls": [
+    "查询忘加 tenant_id：一条漏网查询就把别的客户数据返回了，必须在数据访问层统一注入。",
+    "唯一键只建在 order_no 上：不同租户的单号会互相覆盖，唯一键必须带 tenant_id。",
+    "索引没以 tenant_id 开头：共享表里每个租户的查询都在扫别人的数据，越用越慢。",
+    "所有租户共用一个数据库账号：无法按租户限权，出问题也定位不到是谁，至少按租户建视图和账号。"
+  ],
+  "enterprise": "SaaS 产品先按「共享表 + tenant_id」起步，把租户隔离做进数据访问层和测试用例；大客户或合规要求高时，把该租户迁到独立库并切换连接。上线前必做越权测试（用 A 租户的 token 查 B 租户数据），日常用 SQL 审计检查漏掉的 tenant_id，按租户出账单和容量报告。",
+  "related": [
+    "user-privileges",
+    "ecommerce-schema",
+    "sharding",
+    "read-write-split"
+  ]
+}

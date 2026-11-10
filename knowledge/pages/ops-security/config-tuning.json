@@ -1,0 +1,70 @@
+{
+  "id": "config-tuning",
+  "titleZh": "关键参数调优",
+  "title": "Configuration tuning",
+  "chapter": "ops-security",
+  "difficulty": 3,
+  "minutes": 15,
+  "summary": "参数调优不是把网上的 my.cnf 抄一遍，而是先把内存分对，再调几个真正影响性能的旋钮。MySQL 8.0 大部分默认值已经很合理，真正需要你拍板的主要是 Buffer Pool 大小、redo log 容量、连接数和刷盘策略，其他参数乱改反而更容易出事。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "参数分两种：能 SET GLOBAL 改的是动态参数，改完立即生效但重启就丢；写进 my.cnf 的才是永久生效。还有一类静态参数（比如 innodb_page_size）只能重启改。改之前先想清楚：这个参数重启后还在不在。"
+    },
+    {
+      "heading": "内存怎么分",
+      "text": "innodb_buffer_pool_size 是 MySQL 的「工作台」，数据页和索引页都放这里，通常给物理内存的 50%~70%，留 20%~30% 给系统和其它进程。32G 的机器给 20G 左右就够了，全给 buffer pool 反而会因为抢内存出现 swap。"
+    },
+    {
+      "heading": "redo log 和刷盘策略",
+      "text": "8.0.30 之后用 innodb_redo_log_capacity 一个参数控制 redo 总量，建议装得下 1~2 小时的写入量。innodb_flush_log_at_trx_commit=1 加 sync_binlog=1 是「不丢数据」的标配，改成 0 或 2 能提速但宕机可能丢最近的事务，金融场景不要动。"
+    },
+    {
+      "heading": "连接和超时",
+      "text": "max_connections 按「应用实例数 × 每实例连接池大小 × 1.2」估，再留 20% 余量给运维、备份和监控。wait_timeout 让空闲连接自动断开，避免连接堆到打满；interactive_timeout 管的是交互式客户端，一起看。"
+    },
+    {
+      "heading": "别踩的坑",
+      "text": "8.0 删掉了 Query Cache 等老参数，直接抄几年前的配置会导致实例启动失败。改参数前先在从库或测试环境验证，一次只改一个，记录改动前后的监控对比；改完同步写进 my.cnf 并纳入版本管理。"
+    }
+  ],
+  "keyPoints": [
+    "8.0 默认值不错，优先只调 buffer pool、redo、连接数和刷盘策略。",
+    "innodb_buffer_pool_size 给物理内存的 50%~70%，留出系统余量。",
+    "innodb_flush_log_at_trx_commit=1 加 sync_binlog=1 才是不丢数据的组合。",
+    "SET GLOBAL 改的参数重启就丢，要同步写进 my.cnf。",
+    "8.0 已移除 query_cache 等老参数，抄旧配置会让实例起不来。",
+    "每次只改一个参数，改完看监控对比，改动进变更记录。"
+  ],
+  "snippets": [
+    {
+      "title": "查看关键参数当前值",
+      "lang": "sql",
+      "code": "SHOW VARIABLES WHERE Variable_name IN (\n  'innodb_buffer_pool_size', 'innodb_buffer_pool_instances',\n  'innodb_redo_log_capacity', 'max_connections',\n  'innodb_flush_log_at_trx_commit', 'sync_binlog', 'wait_timeout'\n);"
+    },
+    {
+      "title": "在线调整 buffer pool 和最大连接数",
+      "lang": "sql",
+      "code": "SET GLOBAL max_connections = 2000;\nSET GLOBAL innodb_buffer_pool_size = 21474836480;"
+    },
+    {
+      "title": "查看 buffer pool 命中率",
+      "lang": "sql",
+      "code": "SELECT POOL_ID, POOL_SIZE, DATABASE_PAGES, FREE_BUFFERS, HIT_RATE\nFROM information_schema.INNODB_BUFFER_POOL_STATS;"
+    }
+  ],
+  "pitfalls": [
+    "直接抄网上的「神优化」my.cnf：8.0 移除了 query_cache_size 等参数，实例会启动失败，旧配置还可能放大并发问题。",
+    "把 innodb_buffer_pool_size 设成物理内存的 90%：系统进程抢不到内存，出现 swap 和抖动，反而更慢。",
+    "为了压测好看把 innodb_flush_log_at_trx_commit 设成 0：机器一宕就丢最近的事务，线上不能这么干。",
+    "只用 SET GLOBAL 改参数：重启后全部回退，配置必须落到 my.cnf 并纳入版本管理。"
+  ],
+  "enterprise": "参数变更要走变更单：记录当前值和基线，先在从库或预发验证，影响面大的（buffer pool、max_connections）挑低峰做，改完观察 24 小时再全量。my.cnf 进 git 和版本一起发布，实例创建模板里固化参数，避免每次手工配置产生偏差。",
+  "related": [
+    "monitoring",
+    "connection-pool",
+    "undo-redo-log",
+    "storage-engines",
+    "slow-query-log"
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "id": "index-failure",
+  "titleZh": "索引失效的常见场景",
+  "title": "When indexes fail",
+  "chapter": "index",
+  "difficulty": 3,
+  "minutes": 15,
+  "summary": "索引失效就像你明明有目录，却偏偏用「从第一页开始翻」的方式找内容：索引还在，但 MySQL 用不上它。给列套函数、隐式类型转换、LIKE 以 % 开头、联合索引跳列，都是把目录「盖住」的常见写法。排查时先看 EXPLAIN 的 key 是不是 NULL，再回头改 SQL。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "索引是按「列的原值」排好序的，一旦你让它比较的是「加工后的值」或「换了类型后的值」，排序顺序就对不上了，MySQL 只能放弃索引改走全表扫描。所以判断标准很简单：WHERE 里等号左边是不是干净的列名，比较的值类型是否和列一致。"
+    },
+    {
+      "heading": "函数和运算包住列",
+      "text": "WHERE YEAR(created_at) = 2026 或 WHERE user_id + 1 = 1002，都是在列上做运算，B+ 树里没有「年份」和「user_id+1」的排序，索引直接用不了。改写成范围条件：created_at >= '2026-01-01' AND created_at < '2027-01-01'，以及 user_id = 1001，就能重新命中索引。"
+    },
+    {
+      "heading": "隐式类型转换与 LIKE",
+      "text": "phone 是 VARCHAR，却写成 WHERE phone = 13800000000（数字），MySQL 会把字符串列转成数字再比，索引失效；反之 INT 列和字符串比，MySQL 把常量转成数字，索引还能用。LIKE '138%' 能用索引（前缀匹配），LIKE '%0001' 因为不知道从哪开始，只能全表扫。"
+    },
+    {
+      "heading": "联合索引与 OR",
+      "text": "联合索引不满足最左前缀（比如 (user_id, status) 只查 status），索引就废了。OR 两边只要有一边没有索引，整体也可能退化成全表扫描；能改成 UNION ALL，或给两边都建上索引。排序方向不一致、ORDER BY 列不在索引里，还会额外多一次 filesort。"
+    }
+  ],
+  "keyPoints": [
+    "列上套函数或做运算，索引失效，改成对常量做运算。",
+    "字符串列和数字比较会触发隐式转换，索引失效。",
+    "LIKE 只有前缀匹配 '138%' 能用索引，'%abc' 不行。",
+    "联合索引跳过最左列就用不上，OR 会拖累整体。",
+    "判断是否失效，看 EXPLAIN 的 key 列是否为 NULL。"
+  ],
+  "snippets": [
+    {
+      "title": "函数包列 vs 范围条件",
+      "lang": "sql",
+      "code": "ALTER TABLE orders ADD INDEX idx_created (created_at);\n\n-- 失效：对列套了 DATE()\nEXPLAIN SELECT id FROM orders WHERE DATE(created_at) = '2026-03-01';\n\n-- 生效：改成区间\nEXPLAIN SELECT id FROM orders\nWHERE created_at >= '2026-03-01 00:00:00'\n  AND created_at <  '2026-03-02 00:00:00';"
+    },
+    {
+      "title": "隐式转换与前缀模糊",
+      "lang": "sql",
+      "code": "ALTER TABLE users ADD INDEX idx_phone (phone);\n\n-- 失效：phone 是字符串列，却拿数字比\nEXPLAIN SELECT id FROM users WHERE phone = 13800000001;\n\n-- 生效：值加引号\nEXPLAIN SELECT id FROM users WHERE phone = '13800000001';\n\n-- 生效：前缀匹配\nEXPLAIN SELECT id FROM users WHERE phone LIKE '138%';"
+    }
+  ],
+  "pitfalls": [
+    "WHERE DATE(created_at) = '2026-03-01'：看着像能用索引，实际全表扫描，改成区间条件。",
+    "手机号是 VARCHAR 却写成 = 13800000001：少一对引号，索引就没了，还容易查不到数据。",
+    "LIKE '%关键词%' 做搜索：前后都带 %，任何 B+ 树索引都帮不上，应该用全文索引或搜索引擎。",
+    "OR 里混入一个没索引的列：整体退化成全表扫描，用 UNION ALL 或补齐索引。"
+  ],
+  "enterprise": "企业排查慢 SQL 时第一步就是看 WHERE 写法是否「干净」：列上有没有函数、常量类型对不对、有没有前导通配符、联合索引顺不顺序。跨库或跨表 JOIN 时还要注意两边字符集是否一致（utf8 对 utf8mb4 也会触发隐式转换），这类问题在数据量大了以后非常典型。",
+  "related": ["explain", "composite-index", "slow-query-log", "index-design", "where-filter"]
+}

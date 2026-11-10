@@ -1,0 +1,69 @@
+{
+  "id": "select-basics",
+  "titleZh": "SELECT：从表里挑列",
+  "title": "SELECT basics",
+  "chapter": "sql-basics",
+  "difficulty": 1,
+  "minutes": 12,
+  "summary": "SELECT 是 SQL 的「点菜」：FROM 说去哪个食材柜（表）拿，SELECT 后面写你要哪几样（列），星号就是「全都要」。别一上来就 SELECT *，就像点外卖不看菜单——菜多、上得慢，还容易吃坏肚子。",
+  "sections": [
+    {
+      "heading": "一句话理解：从表里挑列",
+      "text": "SELECT 负责「读」，不改数据。格式是 SELECT 列列表 FROM 表名，后面可以跟 WHERE（筛行）、ORDER BY（排序）、LIMIT（限量）。列用逗号分隔，可以用 AS 起别名；表只有一个时可以省略表前缀，多表查询时最好写成 别名.列名。"
+    },
+    {
+      "heading": "SELECT 决定列，WHERE 决定行",
+      "text": "很多人把两者混着说。准确讲：FROM 先确定数据从哪张表来，WHERE 决定哪些行进入结果，SELECT 决定结果里保留哪些列，ORDER BY 决定行的顺序，LIMIT 决定拿几行。四个动作各管一段，写 SQL 时按这个顺序想就不会乱。"
+    },
+    {
+      "heading": "为什么不建议 SELECT *",
+      "text": "第一，会读出不需要的列，网络和内存都浪费；第二，覆盖索引可能失效，被迫回表；第三，程序按列位置取值时，表加一列就错位；第四，遇到 TEXT、BLOB 这类大字段会把响应撑爆。明确列出需要的列，是专业习惯。"
+    },
+    {
+      "heading": "结果顺序不是你想的那样",
+      "text": "不写 ORDER BY 时，MySQL 返回顺序没有保证：可能走索引顺序、可能是插入顺序，加个索引或换执行计划就变了。分页接口尤其危险，上一页和下一页可能重复或者漏数据。只要在意顺序，就必须显式写 ORDER BY。"
+    },
+    {
+      "heading": "先从三条小查询练起",
+      "text": "查指定列、查指定列加条件、查指定列加排序限量，这三种写法覆盖了日常 80% 的读操作。先把这三条写顺，再去碰聚合和 join，会发现它们只是在这层「取数」之上再加分组和关联。"
+    }
+  ],
+  "keyPoints": [
+    "SELECT 决定列，FROM 决定表，WHERE 决定行，ORDER BY 决定顺序，LIMIT 决定条数。",
+    "SELECT 是只读操作，不会修改表里的数据。",
+    "只查需要的列，别滥用 SELECT *，能减少 IO 并保护覆盖索引。",
+    "不写 ORDER BY 时结果顺序没有保证。",
+    "关键字不区分大小写，字符串值要用单引号。",
+    "分页查询必须配稳定的 ORDER BY，否则会重复或漏行。"
+  ],
+  "snippets": [
+    {
+      "title": "查指定列",
+      "lang": "sql",
+      "code": "SELECT id, name, price, stock\nFROM products\nWHERE on_sale = 1\nORDER BY price DESC\nLIMIT 10;"
+    },
+    {
+      "title": "查某个用户最近的订单",
+      "lang": "sql",
+      "code": "SELECT id, user_id, status, total_amount, created_at\nFROM orders\nWHERE user_id = 1001\nORDER BY created_at DESC\nLIMIT 10;"
+    },
+    {
+      "title": "关键字大小写都行，字符串用单引号",
+      "lang": "sql",
+      "code": "select id, name, price from products where name = '机械键盘';"
+    }
+  ],
+  "pitfalls": [
+    "字符串用双引号：MySQL 默认能跑，但开启 ANSI_QUOTES 后双引号变标识符，标准写法是单引号。",
+    "以为不写 ORDER BY 就按插入顺序返回：8.0 不保证，分页会漂移。",
+    "SELECT * 后程序按列下标取值，表加一列就字段错位。",
+    "在超大表上不写 LIMIT 直接全表扫，把数据库连接和内存拖满。"
+  ],
+  "enterprise": "对外接口只返回需要的字段，避免 SELECT * 把大字段和敏感列带出去；分页必须带唯一键排序，防止翻页重复；核心查询上线前用 EXPLAIN 确认走了索引，别让一次全表扫描拖垮整库。",
+  "related": [
+    "where-filter",
+    "order-limit",
+    "expressions-aliases",
+    "sql-execution-path"
+  ]
+}

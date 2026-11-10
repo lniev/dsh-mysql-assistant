@@ -1,0 +1,69 @@
+{
+  "id": "charset-collation",
+  "titleZh": "字符集与排序规则",
+  "title": "Charset & collation",
+  "chapter": "start",
+  "difficulty": 2,
+  "minutes": 12,
+  "summary": "字符集决定「能存哪些字」，排序规则决定「怎么比大小」。MySQL 老默认 latin1 导致中文乱码，utf8 又只支持 3 字节存不下 emoji。统一用 utf8mb4 + utf8mb4_0900_ai_ci，能少踩 90% 的乱码和「明明有数据却查不到」的坑。",
+  "sections": [
+    {
+      "heading": "一句话理解：能存什么，和怎么比",
+      "text": "字符集（character set）规定每个字符用几个字节编码，排序规则（collation）规定这些字符怎么排序、怎么判断相等。utf8mb4 能存 1~4 字节，包括 emoji 和生僻字；utf8mb4_0900_ai_ci 是 8.0 的默认规则，ai 表示不区分重音，ci 表示不区分大小写。"
+    },
+    {
+      "heading": "utf8 和 utf8mb4 的区别",
+      "text": "MySQL 里的 utf8 实际是 utf8mb3，最多 3 字节，存不下 emoji 和部分生僻字，写入会报 Incorrect string value。utf8mb4 才是完整的 UTF-8，最多 4 字节。8.0 默认字符集已经是 utf8mb4，但 5.7 默认还是 latin1，从 5.7 迁过来的库要特别检查。"
+    },
+    {
+      "heading": "字符集在好几层生效",
+      "text": "服务器、库、表、列、连接，五个层级各有各的字符集。乱码最常见的原因不是库不对，而是连接层没对齐：客户端用 latin1 连进来，服务端当成 utf8mb4 存，数据就花了。连接串里加 characterEncoding=utf8 或执行 SET NAMES utf8mb4 能对齐。"
+    },
+    {
+      "heading": "排序规则会影响查询结果",
+      "text": "ci 规则下 'Apple' 和 'apple' 相等，WHERE name = 'apple' 能查到 'Apple'；建唯一索引时 'A' 和 'a' 会冲突。需要严格区分大小写就选 _bin 结尾的规则（如 utf8mb4_bin）。所以排序规则不只是「排序」，还影响等值比较和去重。"
+    },
+    {
+      "heading": "迁移历史库怎么做",
+      "text": "先 SHOW VARIABLES LIKE 'character_set%' 看清现状，再用 information_schema.COLUMNS 找出非 utf8mb4 的列，用 ALTER TABLE ... CONVERT TO CHARACTER SET utf8mb4 转换。大表转换等于重建表，要低峰做，并提前验证 emoji、生僻字是否正常。"
+    }
+  ],
+  "keyPoints": [
+    "字符集管「能存哪些字」，排序规则管「怎么比较和排序」。",
+    "utf8mb4 才是完整 UTF-8，能存 emoji；utf8/utf8mb3 只到 3 字节。",
+    "utf8mb4_0900_ai_ci：ai 不区分重音，ci 不区分大小写。",
+    "乱码多数是连接层字符集不一致，不是库本身。",
+    "ci 规则会让 'A' 和 'a' 判定相等，影响 WHERE 等值比较和唯一索引。",
+    "索引长度按字节算，utf8mb4 下 VARCHAR(255) 的索引占 1020 字节。"
+  ],
+  "snippets": [
+    {
+      "title": "查服务器和连接层的字符集",
+      "lang": "sql",
+      "code": "SHOW VARIABLES LIKE 'character_set%';\nSHOW VARIABLES LIKE 'collation%';"
+    },
+    {
+      "title": "建表时把字符集写死",
+      "lang": "sql",
+      "code": "CREATE TABLE product_comments (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  product_id BIGINT UNSIGNED NOT NULL,\n  content VARCHAR(500) NOT NULL,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id),\n  KEY idx_product (product_id)\n) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;"
+    },
+    {
+      "title": "查某张表每列的字符集",
+      "lang": "sql",
+      "code": "SELECT COLUMN_NAME, CHARACTER_SET_NAME, COLLATION_NAME\nFROM information_schema.COLUMNS\nWHERE TABLE_SCHEMA = DATABASE()\n  AND TABLE_NAME = 'products';"
+    }
+  ],
+  "pitfalls": [
+    "用 utf8 建表：emoji 存进去变问号，或直接报 Incorrect string value。",
+    "只看库的字符集，忽略连接字符集：程序写进去就乱码。",
+    "以为 ci 排序规则只影响排序：等值比较和唯一索引也会按它判等。",
+    "直接对大表 ALTER TABLE ... CONVERT TO CHARACTER SET：等于重建表，锁表时间长，要低峰或用工具。"
+  ],
+  "enterprise": "新库统一 utf8mb4 + utf8mb4_0900_ai_ci，写进建表模板；客户端连接串和 ORM 配置显式指定字符集；历史 latin1/utf8 库迁移前先备份并做字节校验；订单号、手机号这类需要精确匹配的字段，按需选 _bin 规则避免大小写歧义。",
+  "related": [
+    "first-database",
+    "data-types",
+    "install-and-connect",
+    "naming-conventions"
+  ]
+}

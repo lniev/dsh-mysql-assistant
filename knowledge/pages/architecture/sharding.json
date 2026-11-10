@@ -1,0 +1,63 @@
+{
+  "id": "sharding",
+  "titleZh": "分库分表：何时拆、怎么拆",
+  "title": "Sharding",
+  "chapter": "architecture",
+  "difficulty": 4,
+  "minutes": 20,
+  "summary": "分库分表是把一张大表按规则拆到多个库或多个表里，像把一本厚账本拆成 16 本按用户分册的账本。它不是性能优化的第一选择，而是单机真的快到顶时的最后手段。拆之前先把索引、归档、缓存、读写分离做到位；拆之后要接受跨库查询和分布式事务的代价。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "一个账本记了十年，翻一页要很久，干脆按用户分成 16 本：查谁就翻对应那本。好处是每本都薄、查得快，坏处是「按时间统计全部订单」这种需求，要 16 本全翻一遍再合并。分库分表就是把「一本大账」换成「多本小账」，快和方便之间要交换。"
+    },
+    {
+      "heading": "什么时候才值得拆",
+      "text": "看三个信号：单表数据量已经几千万行且还在快速涨；单库的磁盘、CPU、QPS 或连接数长期逼近上限；索引优化、SQL 改写、缓存、归档、读写分离都已经做过且效果有限。只是「表大」但查询都能走索引、历史数据还能归档，就先别拆。分库分表会让业务复杂度翻好几倍，不值得为省一点成本提前买单。"
+    },
+    {
+      "heading": "拆之前先做哪些事",
+      "text": "顺序基本固定：第一，把慢查询和索引优化干净；第二，冷热分离，把历史订单、日志归档到归档库；第三，给热点读加 Redis 缓存；第四，用读写分离分摊读流量；第五，看能不能按业务垂直拆库（订单库、商品库、用户库分开）；第六，可以用分区表过渡。这些手段能扛住大部分增长，还能为真正拆分争取时间。"
+    },
+    {
+      "heading": "路由键怎么选",
+      "text": "路由键要同时满足三点：查询最常用、数据分布均匀、尽量不跨片。订单表通常选 user_id，因为用户端「我的订单」是最高频查询。如果商家后台还要按商家查，就得做异构索引或者基因法（把商家 id 编码进分片键计算）。不要用时间做路由键，热点会全压在最新分片上；也不要用会变的字段。分片数取 2 的幂，方便后续扩容。"
+    },
+    {
+      "heading": "拆完的代价：跨库查询与事务",
+      "text": "跨分片 JOIN 直接做不了，要冗余字段或宽表；排序和分页要各分片查完再在应用层归并，深分页尤其痛；COUNT、SUM 这类聚合要汇总多个分片结果；事务不再是一个本地事务，要上 TCC、Saga 或本地消息表保证最终一致。此外还要解决全局唯一 ID、跨分片的唯一约束、以及扩容时的数据再均衡。这些成本必须提前算清楚。"
+    }
+  ],
+  "keyPoints": [
+    "分库分表是最后手段：先索引、缓存、归档、读写分离、垂直拆库。",
+    "单表两千万行不是硬指标，看的是 QPS、磁盘和索引是否还有优化空间。",
+    "路由键选查询最常用、分布均匀、尽量不跨片的字段，订单多用 user_id。",
+    "跨分片 JOIN、排序分页、聚合和事务都会变成应用层的工作。",
+    "分片数要提前规划，扩容时数据再均衡是最痛的一步。"
+  ],
+  "snippets": [
+    {
+      "title": "按 user_id 取模路由到 4 个分片",
+      "lang": "sql",
+      "code": "-- 假设订单表已按 user_id % 4 拆成 orders_0 ~ orders_3\n-- 应用层算出分片号 2，把 SQL 发到对应库\nSELECT id, user_id, status, total_amount, created_at\nFROM orders_2\nWHERE user_id = 1002\nORDER BY created_at DESC\nLIMIT 20;"
+    },
+    {
+      "title": "跨分片查询：各分片查完在应用层归并",
+      "lang": "sql",
+      "code": "-- 每个分片执行一次，应用层合并后统一排序\nSELECT id, user_id, total_amount, created_at\nFROM orders_1\nWHERE created_at >= '2026-05-01'\nORDER BY created_at DESC\nLIMIT 20;\n-- orders_0 / orders_2 / orders_3 同样执行，再归并取前 20"
+    },
+    {
+      "title": "全球唯一 ID：号段模式",
+      "lang": "sql",
+      "code": "CREATE TABLE id_sequence (\n  name VARCHAR(32) PRIMARY KEY,\n  value BIGINT NOT NULL\n) ENGINE = InnoDB;\n\nUPDATE id_sequence SET value = LAST_INSERT_ID(value + 1000) WHERE name = 'order_id';\nSELECT LAST_INSERT_ID();  -- 应用一次取 1000 个号在内存里分配"
+    }
+  ],
+  "pitfalls": [
+    "一上来就分库分表，业务代码复杂十倍，性能却没改善，瓶颈其实在慢 SQL 或缓存缺失。",
+    "路由键选错，比如按订单 id 分片却总按 user_id 查，每次都要扫全部分片。",
+    "以为分片后还能随便 JOIN 和用分布式事务，上线才发现跨库查询贵得离谱。",
+    "分片数一开始就定成 100，扩容时数据迁移要停服好几天。"
+  ],
+  "enterprise": "分库分表的决策要写进架构评审：先给出单表增长曲线、QPS 和磁盘水位，以及已经做过的优化，再证明必须拆。拆的时候优先用成熟中间件，路由键、全局 ID、迁移方案一次设计到位；上线后重点监控跨分片查询比例和慢 SQL，把「禁止无分片键查询」写成代码规范。",
+  "related": ["sharding-middleware", "migration", "capacity-planning", "read-write-split", "cache-redis"]
+}

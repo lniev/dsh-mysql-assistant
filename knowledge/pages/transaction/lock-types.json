@@ -1,0 +1,63 @@
+{
+  "id": "lock-types",
+  "titleZh": "锁的类型与加锁规则",
+  "title": "Lock types",
+  "chapter": "transaction",
+  "difficulty": 3,
+  "minutes": 15,
+  "summary": "锁就是数据库里的「使用权」：共享锁允许多个人一起看，排他锁让某个人独占修改。按范围有表锁和行锁，按模式有共享锁（S）、排他锁（X）、意向锁，还有保护表结构的元数据锁（MDL）。搞懂加锁规则，才能解释「我只想更新一行，为什么把整张表卡住了」。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "像图书馆的座位：几个同学可以一起看同一本书，这是共享锁；有人要把书带走去改，别人就不能看也不能改，这是排他锁。行锁是只锁这一个座位，表锁是把整间阅览室锁起来；理解锁，本质上是理解「谁能用、用到什么时候」。"
+    },
+    {
+      "heading": "行锁与表锁",
+      "text": "InnoDB 默认行级锁，只锁索引命中的那些行，并发度高。但行锁是加在索引记录上的：WHERE 没走索引，InnoDB 只能扫全表并给扫到的行都加锁，效果接近锁全表，这是线上最坑的场景之一。表锁来自 LOCK TABLES，或者 ALTER TABLE 等 DDL 触发的元数据锁。"
+    },
+    {
+      "heading": "S 锁、X 锁与意向锁",
+      "text": "共享锁用 SELECT ... FOR SHARE 加，多个事务可以同时持有，但谁都改不了。排他锁由 UPDATE、DELETE、SELECT ... FOR UPDATE 加，互斥，别人既不能读也不能改。意向锁（IS/IX）是加在表上的「路标」，告诉其他事务「这张表里已经有行锁了」，这样加表锁时不用逐行检查。"
+    },
+    {
+      "heading": "加锁规则：锁的是索引",
+      "text": "唯一索引等值命中时，只锁那一行记录。范围查询或非唯一索引的等值查询，会加 next-key lock（记录锁加间隙锁），把范围里的空位也锁上。没索引就只能全表扫描，几乎锁住所有行。所以「按主键或唯一键定位」既是性能要求，也是并发安全要求。"
+    },
+    {
+      "heading": "怎么看谁在等锁",
+      "text": "MySQL 8.0 用 performance_schema.data_locks 看当前锁，用 data_lock_waits 看谁在等谁；旧版本的 innodb_locks 已经移除。遇到「更新卡住」时，先看 data_lock_waits，再结合 information_schema.innodb_trx 找到持锁的事务和它的 SQL。"
+    }
+  ],
+  "keyPoints": [
+    "普通 SELECT 走 MVCC 不加锁，要加锁得显式写 FOR SHARE 或 FOR UPDATE。",
+    "行锁加在索引记录上，WHERE 没走索引会退化成大量行锁。",
+    "UPDATE、DELETE 自动加排他锁，同一条记录的 X 锁互斥。",
+    "MDL 读锁让 DDL 排队，长事务会让 ALTER 一直等并堵住后续查询。",
+    "8.0 排查锁用 performance_schema.data_locks 和 data_lock_waits。"
+  ],
+  "snippets": [
+    {
+      "title": "共享锁与排他锁",
+      "lang": "sql",
+      "code": "START TRANSACTION;\nSELECT * FROM products WHERE id = 1001 FOR SHARE;\nSELECT * FROM products WHERE id = 1001 FOR UPDATE;\nCOMMIT;"
+    },
+    {
+      "title": "查看当前的锁和等待关系",
+      "lang": "sql",
+      "code": "SELECT * FROM performance_schema.data_locks;\nSELECT * FROM performance_schema.data_lock_waits;"
+    },
+    {
+      "title": "没走索引的更新会锁很多行",
+      "lang": "sql",
+      "code": "EXPLAIN UPDATE products SET stock = stock - 1 WHERE name = '机械键盘';"
+    }
+  ],
+  "pitfalls": [
+    "以为 SELECT 一定会加锁：普通查询走快照读不加锁，要加锁必须显式 FOR UPDATE。",
+    "更新条件没有索引，行锁变成近似全表锁，别人的更新全部排队。",
+    "事务里先 SELECT ... FOR UPDATE 再去做耗时操作，锁一直不释放。",
+    "长事务占着 MDL，DDL 等锁期间把后面的查询也一起堵死。"
+  ],
+  "enterprise": "线上所有 UPDATE、DELETE 的 WHERE 必须有合适索引，尽量按主键或唯一键定位；热点行更新要控制事务长度并加重试。做 DDL 前先查 information_schema.innodb_trx 有没有长事务，否则 ALTER 会卡在 MDL 上，把整张表的读写拖住，宁可低峰期再做。",
+  "related": ["gap-lock", "deadlock", "mvcc", "optimistic-pessimistic", "index-failure"]
+}

@@ -1,0 +1,8 @@
+# MySQL 学习助手 — Loader patch.
+# One Host row: the knowledge tool, the /mysql-assistant/api routes and the SQL
+# playground runtime live in the Host half (`index.js` + `host/sql-runtime.js`);
+# the panel is the Client half (`client.js`, see `dsh.client` in package.json).
+- insert:
+    - id: mysql-assistant
+      name: '@local/mysql-assistant'
+      config: {}

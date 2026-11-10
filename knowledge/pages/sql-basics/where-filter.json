@@ -1,0 +1,69 @@
+{
+  "id": "where-filter",
+  "titleZh": "WHERE：按条件筛选",
+  "title": "WHERE filter",
+  "chapter": "sql-basics",
+  "difficulty": 1,
+  "minutes": 15,
+  "summary": "WHERE 是 SQL 的「筛子」：把表里所有行倒进去，只留下满足条件的行。像从 10 万条订单里只捞出最近 7 天已支付的订单。它不改变表结构也不改数据，只决定这次查询看哪些行。",
+  "sections": [
+    {
+      "heading": "一句话理解：先筛行，再选列",
+      "text": "SELECT 决定拿哪几列，WHERE 决定哪些行能通过。写 SQL 时先想「我要哪些行」，把条件写进 WHERE，再想「我要哪些列」，写进 SELECT。筛选得越早，后面排序、分组要处理的数据越少。"
+    },
+    {
+      "heading": "常用条件写法",
+      "text": "比较 =、<>、>、<、>=、<=；范围 BETWEEN '2026-01-01' AND '2026-01-31'；集合 IN ('paid', 'shipped')；模糊 LIKE '%耳机%'；空值 IS NULL 或 IS NOT NULL；组合用 AND、OR、NOT。字符串和日期记得加单引号。"
+    },
+    {
+      "heading": "AND 和 OR 的优先级",
+      "text": "AND 比 OR 先算，所以 WHERE status = 'paid' AND total_amount >= 500 OR total_amount >= 5000 会被理解成 (status = 'paid' AND total_amount >= 500) OR total_amount >= 5000，把条件拆歪了。只要出现 OR，就给它套括号，这是最便宜的好习惯。"
+    },
+    {
+      "heading": "为什么 WHERE 里不能用别名",
+      "text": "执行顺序是 FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT，WHERE 在 SELECT 之前执行，这时候别名还不存在。所以 WHERE amount_with_tax > 100 会报 Unknown column，要么把表达式重写一遍，要么改到 HAVING 里过滤。"
+    },
+    {
+      "heading": "写法直接决定快慢",
+      "text": "WHERE 是索引入口，写法不对索引就白建。列上套函数、字段类型和常量不一致、LIKE 以 % 开头、对索引列做运算、OR 太多，都会让索引失效，变成全表扫描。把条件写成「列 运算符 常量」的形式，数据库才用得上索引。"
+    }
+  ],
+  "keyPoints": [
+    "WHERE 过滤行，SELECT 选列，两者分工不同。",
+    "字符串和日期用单引号：WHERE status = 'paid'。",
+    "判断 NULL 必须用 IS NULL / IS NOT NULL，不能用 = NULL。",
+    "AND 优先级高于 OR，混用时必须加括号。",
+    "WHERE 在 SELECT 之前执行，所以 WHERE 里不能用 SELECT 的列别名。",
+    "LIKE 以 % 开头、列上套函数、类型不一致，都会让索引失效。"
+  ],
+  "snippets": [
+    {
+      "title": "基础条件筛选",
+      "lang": "sql",
+      "code": "SELECT id, user_id, total_amount, created_at\nFROM orders\nWHERE status = 'paid'\n  AND total_amount >= 100\n  AND created_at >= '2026-01-01';"
+    },
+    {
+      "title": "OR 一定要加括号",
+      "lang": "sql",
+      "code": "SELECT id, user_id, status, total_amount\nFROM orders\nWHERE (status = 'paid' OR status = 'shipped')\n  AND total_amount >= 500;"
+    },
+    {
+      "title": "范围、集合与模糊查询",
+      "lang": "sql",
+      "code": "SELECT id, name, price\nFROM products\nWHERE category_id IN (1, 2)\n  AND price BETWEEN 100 AND 500\n  AND name LIKE '%键盘%';"
+    }
+  ],
+  "pitfalls": [
+    "写 total_amount = NULL：结果永远是空，必须用 IS NULL。",
+    "OR 混用不加括号：查出来的数据多了一块，还以为数据本身错了。",
+    "在索引列上套函数：WHERE DATE(created_at) = '2026-01-01' 让索引失效，改成范围条件。",
+    "LIKE '%关键词'：前置通配符用不上索引，数据量大时很慢，考虑全文索引或搜索引擎。"
+  ],
+  "enterprise": "线上排查先写全 WHERE 缩小范围，再补 ORDER BY 和 LIMIT，避免全表扫描；高频过滤字段建索引，重点盯「函数包列」「前置百分号」「隐式类型转换」三类索引失效；删改数据的 WHERE 必须先用 SELECT COUNT(*) 验证影响行数。",
+  "related": [
+    "select-basics",
+    "null-handling",
+    "order-limit",
+    "index-failure"
+  ]
+}

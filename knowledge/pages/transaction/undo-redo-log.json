@@ -1,0 +1,58 @@
+{
+  "id": "undo-redo-log",
+  "titleZh": "undo log 与 redo log",
+  "title": "Undo & redo log",
+  "chapter": "transaction",
+  "difficulty": 3,
+  "minutes": 15,
+  "summary": "undo log 是「后悔药」：记下每行改动之前的模样，事务回滚或者别人要读旧版本时用它。redo log 是「预记账本」：先把「要改什么」顺序写进日志，再慢慢把数据页刷到磁盘，机器突然断电也能照账本补回来。一个负责能反悔，一个负责不丢数据，是 InnoDB 事务的底座。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "想象银行柜员先在流水账上记一笔，再慢慢更新厚厚的大账本。只要流水账没丢，大账本晚点补也没事，这就是 redo。旁边还有一本「改动前截图」相册，需要撤销时翻开对照，这就是 undo。"
+    },
+    {
+      "heading": "undo log：能反悔的账本",
+      "text": "每次修改都记录一条反向操作：INSERT 对应 DELETE，UPDATE 记下旧值。事务 ROLLBACK 时按相反顺序执行，把数据恢复原样。事务提交后 undo 也不一定马上删，因为 MVCC 还要靠旧版本给别的快照读用，最后由 purge 线程清理。"
+    },
+    {
+      "heading": "redo log：先记账再慢慢落盘",
+      "text": "InnoDB 改数据实际改的是内存里的 buffer pool，数据页刷回磁盘是随机的、很慢。redo log 是顺序写，快得多，于是采用 WAL（先写日志）：提交时只要保证 redo 落盘，数据页可以异步刷。机器断电重启后，用 redo 把没刷完的改动重放一遍，数据就回来了。"
+    },
+    {
+      "heading": "redo 是循环使用的",
+      "text": "redo 文件容量固定、循环复用：写满一圈之前，必须先做 checkpoint 把对应的脏页刷盘，腾出可写空间。所以 redo 太小会导致频繁刷脏页、写入抖动；MySQL 8.0.30 之后用 innodb_redo_log_capacity 统一控制容量。写入很猛时最该看的指标之一就是 redo 的剩余空间。"
+    },
+    {
+      "heading": "和 binlog 的分工",
+      "text": "redo 是 InnoDB 引擎层的物理日志，只服务本机崩溃恢复；binlog 是 Server 层的逻辑日志，负责主从复制和时间点恢复。两者通过两阶段提交保持一致，否则会出现「主库有记录、从库没有」或者反过来的灾难。"
+    }
+  ],
+  "keyPoints": [
+    "undo：负责回滚和 MVCC 旧版本，存的是改动前的数据。",
+    "redo：负责崩溃恢复，存的是对数据页做了什么，顺序写、性能高。",
+    "WAL 的核心是「先保证日志落盘，数据页可以慢慢刷」。",
+    "innodb_flush_log_at_trx_commit=1 才满足持久性，另一半是 sync_binlog=1。",
+    "redo 循环使用，靠 checkpoint 腾空间，太小会导致频繁刷脏页。"
+  ],
+  "snippets": [
+    {
+      "title": "查看 redo 刷盘策略与容量",
+      "lang": "sql",
+      "code": "SHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit';\nSHOW VARIABLES LIKE 'innodb_redo_log_capacity';  -- 8.0.30 起可用\nSHOW ENGINE INNODB STATUS;"
+    },
+    {
+      "title": "回滚时 undo 把旧值写回去",
+      "lang": "sql",
+      "code": "START TRANSACTION;\nUPDATE products SET stock = stock - 5 WHERE id = 1001;\nSELECT stock FROM products WHERE id = 1001;  -- 事务内看到减掉 5 之后的值\nROLLBACK;\nSELECT stock FROM products WHERE id = 1001;  -- 恢复到原值，undo log 生效"
+    }
+  ],
+  "pitfalls": [
+    "把 redo 当成 binlog：redo 不能做主从复制，binlog 也不负责崩溃恢复的物理重放。",
+    "以为 COMMIT 后数据页已经写到磁盘：保证的是 redo 落盘，数据页可能还没刷。",
+    "把 innodb_flush_log_at_trx_commit 调成 2 换性能，却以为不会丢数据，断电会丢最近约 1 秒事务。",
+    "事务里改几十万行再回滚，以为「没生效就不占空间」，undo 已经先膨胀了。"
+  ],
+  "enterprise": "金融、订单等不能丢数据的场景必须保持「双 1」：innodb_flush_log_at_trx_commit=1 且 sync_binlog=1，代价是每次提交多一次 fsync，吞吐会降；可以用 SSD、组提交、批量合并来补。redo 容量和磁盘 IOPS 是写入瓶颈的第一排查点。",
+  "related": ["acid", "mvcc", "binlog", "isolation-levels", "config-tuning"]
+}

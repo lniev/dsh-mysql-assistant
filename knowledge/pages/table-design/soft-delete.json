@@ -1,0 +1,54 @@
+{
+  "id": "soft-delete",
+  "titleZh": "软删除与状态字段设计",
+  "title": "Soft delete",
+  "chapter": "table-design",
+  "difficulty": 2,
+  "minutes": 10,
+  "summary": "软删除就是「不真删，只贴个已删除标签」：数据还躺在表里，但查询时默认过滤掉。像公司把离职员工从通讯录里隐藏，人还在、历史工单还能查。它让误删可恢复、让历史数据可追溯，但也会带来唯一索引冲突、表越来越大、查询忘加条件等新问题。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "硬删除是 DELETE FROM users WHERE id = 1，行真的没了；软删除是 UPDATE users SET deleted_at = NOW() WHERE id = 1，行还在，只是被标记。之后所有业务查询都要带上「未删除」条件，这样历史订单、审计日志还能关联到这个人。"
+    },
+    {
+      "heading": "用哪个标记字段",
+      "text": "常见两种：deleted_at 时间戳（还能知道什么时候删的）和 is_deleted 布尔值（简单但丢时间信息）。推荐 deleted_at，并且用「哨兵值」而不是 NULL 表示未删除，这样能和唯一索引配合——因为 MySQL 认为多个 NULL 互不相等，NULL 参与的唯一索引挡不住重复。"
+    },
+    {
+      "heading": "唯一索引是最大的坑",
+      "text": "手机号要唯一，但用户删了以后应该允许同手机号重新注册。如果唯一索引只有 phone，软删除后新用户注册会撞键。解法是把删除标记也放进唯一索引：phone + deleted_at，未删除统一用 '1970-01-01 00:00:00'，删除时写入真实时间，这样「一个手机号同时只能有一条未删除记录」。"
+    },
+    {
+      "heading": "别忘了数据会越攒越多",
+      "text": "软删除的数据仍然占磁盘、进索引、影响扫描效率，还可能被误查出来。企业里通常配一个归档任务：把删除超过 N 天的数据搬到历史表，再从主表物理删除；或者按时间分区，直接 DROP 老分区，比一行行 DELETE 快得多。"
+    }
+  ],
+  "keyPoints": [
+    "软删除 = 标记删除，数据保留，查询要显式过滤。",
+    "deleted_at 比 is_deleted 多一个「什么时候删的」信息。",
+    "未删除用哨兵时间 '1970-01-01' 而不是 NULL，唯一索引才能生效。",
+    "唯一索引要把删除标记一起放进去，否则删了不能再注册。",
+    "软删除数据要定期归档或物理清理，避免表无限膨胀。"
+  ],
+  "snippets": [
+    {
+      "title": "软删除 + 唯一索引配合",
+      "lang": "sql",
+      "code": "CREATE TABLE users (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  phone VARCHAR(20) NOT NULL,\n  name VARCHAR(40) NOT NULL DEFAULT '',\n  deleted_at DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00' COMMENT '70 年表示未删除',\n  PRIMARY KEY (id),\n  UNIQUE KEY uk_phone_alive (phone, deleted_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nUPDATE users SET deleted_at = NOW() WHERE id = 1;\nSELECT id, phone FROM users WHERE deleted_at = '1970-01-01 00:00:00';"
+    },
+    {
+      "title": "订单表用状态字段代替删除",
+      "lang": "sql",
+      "code": "SELECT id, status, total_amount\nFROM orders\nWHERE status <> 'cancelled'\n  AND created_at >= '2026-01-01'\nORDER BY created_at DESC\nLIMIT 20;"
+    }
+  ],
+  "pitfalls": [
+    "忘记加删除过滤：报表把已删除用户也算进去，数据对不上，排查半天才发现少了个条件。",
+    "唯一索引只有 phone：软删除后同手机号无法重新注册，报 Duplicate entry。",
+    "用 NULL 表示未删除又拿它做唯一索引：多个 NULL 互不相等，唯一约束形同虚设。",
+    "所有表都软删除却不归档：几年后表上亿行，查询和备份都变慢，最后只能停机清理。"
+  ],
+  "enterprise": "企业里通常只在需要「可恢复、可追溯」的核心表上用软删除（用户、商品、合同），日志流水类数据直接物理删除或归档。统一用 BaseEntity 里的 deleted_at 字段配合 ORM 全局过滤，同时提供归档任务和「已删除数据」查询入口，方便客服和排查。",
+  "related": ["unique-check-default", "create-table", "data-archiving", "index-failure"]
+}

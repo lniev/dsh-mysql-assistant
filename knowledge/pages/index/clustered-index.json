@@ -1,0 +1,54 @@
+{
+  "id": "clustered-index",
+  "titleZh": "聚簇索引与主键",
+  "title": "Clustered index",
+  "chapter": "index",
+  "difficulty": 3,
+  "minutes": 12,
+  "summary": "聚簇索引就是字典正文本身按拼音排好序：你要找的字在哪一页，正文里就按顺序排在哪，找到目录项的同时数据也就在眼前。InnoDB 的主键索引就是聚簇索引，叶子节点直接存整行数据，所以按主键查一行是最快的路径，也解释了为什么主键要短、要递增。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "聚簇索引（clustered index）指的是「索引和数据放在一起」：B+ 树的叶子节点里存的是完整的行数据，而不是地址。InnoDB 必须选一个聚簇索引，优先用主键；没主键就找第一个非空唯一索引；都没有就生成隐藏的 6 字节 row_id。"
+    },
+    {
+      "heading": "主键查行为什么最快",
+      "text": "按主键等值查询，从根节点一路走到叶子，拿到叶子就是整行数据，只走一棵树，不需要二次查找。EXPLAIN 里 type=const（唯一索引等值）或 eq_ref（JOIN 时用主键/唯一键关联）就是这种最优访问方式。"
+    },
+    {
+      "heading": "为什么主键要短、要递增",
+      "text": "所有二级索引的叶子节点里存的都是主键值，主键越长，每个二级索引都跟着变大。主键随机（UUID）会让插入落在树中间，频繁页分裂、产生碎片。所以最佳实践是 BIGINT UNSIGNED AUTO_INCREMENT：8 字节、趋势递增、无业务含义。"
+    },
+    {
+      "heading": "主键别随便改",
+      "text": "主键值一改，聚簇索引要挪位置，所有二级索引里记录的主键值也都要更新，等于一次大范围重写。业务 id、手机号这类可能变化的字段不要当主键，用稳定不变的自增 id 更省心。"
+    }
+  ],
+  "keyPoints": [
+    "InnoDB 的表本身就是一棵按主键组织的 B+ 树，叶子存整行。",
+    "一张表只有一个聚簇索引，优先是主键，没有主键会有隐藏 row_id。",
+    "主键等值查询一次树查找就拿到整行，是最快的访问方式。",
+    "二级索引叶子存的是主键值，主键越长所有索引越大。",
+    "主键用短小、递增、无业务含义的 BIGINT 自增。"
+  ],
+  "snippets": [
+    {
+      "title": "主键等值查询是最优路径",
+      "lang": "sql",
+      "code": "CREATE TABLE users (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  phone VARCHAR(20) NOT NULL,\n  name VARCHAR(40) NOT NULL DEFAULT '',\n  PRIMARY KEY (id),\n  UNIQUE KEY uk_phone (phone)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\nEXPLAIN SELECT id, phone, name FROM users WHERE id = 1001;"
+    },
+    {
+      "title": "按主键范围扫，叶子链表顺序读",
+      "lang": "sql",
+      "code": "EXPLAIN SELECT id, total_amount\nFROM orders\nWHERE id BETWEEN 10000 AND 10100;"
+    }
+  ],
+  "pitfalls": [
+    "用 UUID 当聚簇索引主键：插入随机、页分裂严重，数据量大后表和索引都膨胀。",
+    "用超长字符串（邮箱、URL）当主键：所有二级索引都被迫存一份长键，空间和 IO 都翻倍。",
+    "以为可以给一张表建两个聚簇索引：聚簇索引只能有一个，其他都是二级索引。",
+    "建表不写主键：InnoDB 生成隐藏 row_id 且无法使用，数据顺序也控制不了。"
+  ],
+  "enterprise": "企业建表规范几乎都强制「BIGINT UNSIGNED AUTO_INCREMENT 主键」，即使业务有唯一键（手机号、订单号）也只用唯一索引。分库分表后改用雪花算法这类趋势递增的全局 id，仍然保持「短、递增、不变」这三个特性。",
+  "related": ["primary-key", "secondary-index", "btree-index", "auto-increment", "index-concept"]
+}

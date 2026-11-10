@@ -1,0 +1,65 @@
+{
+  "id": "sql-injection",
+  "titleZh": "SQL 注入与参数化查询",
+  "title": "SQL injection",
+  "chapter": "ops-security",
+  "difficulty": 2,
+  "minutes": 15,
+  "summary": "SQL 注入就是把用户填的内容当成 SQL 代码执行了。比如登录框里输入一段特殊字符，后端如果直接把字符串拼进 SQL，密码判断就可能被绕过，谁都能登录。防它的核心只有一句话：SQL 骨架和用户数据分开传，用参数化查询，别自己拼字符串。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "想象你让同事「把那张写着名字的纸贴到墙上」，结果纸上写的是「把所有纸都撕了」。程序把用户输入拼进 SQL 时，数据库分不清哪一段是命令、哪一段是数据，注入就发生了。参数化查询相当于「纸上只能写名字，不能写命令」。"
+    },
+    {
+      "heading": "注入怎么发生",
+      "text": "登录逻辑如果写成 SELECT * FROM users WHERE phone = 拼接的输入，攻击者输入一个引号就能提前闭合字符串，再塞进 OR 1=1 或注释符，条件永远成立。搜索、排序、LIKE、批量插入同样是入口，凡是拼字符串的地方都值得怀疑。"
+    },
+    {
+      "heading": "为什么参数化能防",
+      "text": "预编译（PREPARE）先让数据库把 SQL 骨架解析成执行计划，占位符 ? 只留位置；之后传进来的值无论包含引号、分号还是注释，都只当数据，不会重新改变语句含义。先定语法、再填值，这是本质区别。"
+    },
+    {
+      "heading": "还有哪些加固",
+      "text": "用 ORM 时避免在 whereRaw 这类地方手拼字符串；表名、列名、ASC/DESC 不能参数化，用白名单映射；生产环境不要把 SQL 和堆栈返回给前端；数据库账号按最小权限，注入者即使拿到连接也删不了库。"
+    }
+  ],
+  "keyPoints": [
+    "永远不要把用户输入拼进 SQL 字符串，用占位符 ? 或命名参数。",
+    "预编译能防「值」的注入，表名、列名、排序方向要另外做白名单。",
+    "前端校验只是体验，后端必须参数化，两者不能互相替代。",
+    "数据库最小权限是注入的最后一道防线。",
+    "生产环境关闭详细报错，别把表结构和堆栈暴露出去。"
+  ],
+  "snippets": [
+    {
+      "title": "参数化查询：先编译骨架，再传值",
+      "lang": "sql",
+      "code": "PREPARE login_stmt FROM 'SELECT id, name FROM users WHERE phone = ? AND password_hash = ?';\nSET @phone = '13800000000';\nSET @pwd = SHA2('user-input-pass', 256);\nEXECUTE login_stmt USING @phone, @pwd;\nDEALLOCATE PREPARE login_stmt;"
+    },
+    {
+      "title": "非得拼字符串时，值要用 QUOTE 转义",
+      "lang": "sql",
+      "code": "SET @city = '上海';\nSET @sql = CONCAT('SELECT id, name FROM users WHERE city = ', QUOTE(@city));\nPREPARE q FROM @sql;\nEXECUTE q;\nDEALLOCATE PREPARE q;"
+    },
+    {
+      "title": "被注入时，数据库看到的是这个账号",
+      "lang": "sql",
+      "code": "SELECT CURRENT_USER() AS login_account, USER() AS client_account;"
+    }
+  ],
+  "pitfalls": [
+    "只在前端 JS 校验或过滤引号：攻击者直接调接口照样注入，必须在后端参数化。",
+    "把 LIMIT、ORDER BY、表名也当参数传：占位符只能替换值，标识符必须用白名单枚举。",
+    "捕获异常后把 SQL 原文返回给接口调用方：等于把表结构送给攻击者，日志里记录、响应里给通用错误。",
+    "以为用了 ORM 就安全，却在 whereRaw 里手拼字符串：ORM 只保护走参数化 API 的查询。"
+  ],
+  "enterprise": "上线前做一次代码扫描，重点搜字符串拼接 SQL 的位置；登录、支付、搜索这些入口必须参数化，再配限流和最小权限账号。数据库账号只给业务表 DML，不给 FILE、DROP，注入者拿不到更多东西。生产报错统一脱敏，安全测试把注入列为必测项。",
+  "related": [
+    "user-privileges",
+    "data-masking",
+    "audit",
+    "where-filter",
+    "select-basics"
+  ]
+}

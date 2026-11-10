@@ -1,0 +1,68 @@
+{
+  "id": "storage-engines",
+  "titleZh": "存储引擎：InnoDB 与 MyISAM",
+  "title": "Storage engines",
+  "chapter": "start",
+  "difficulty": 2,
+  "minutes": 12,
+  "summary": "存储引擎像汽车的发动机：SQL 是方向盘，真正让车跑的是发动机。MySQL 默认的 InnoDB 支持事务和行锁，适合电商这种「钱不能错」的业务；MyISAM 没有事务，只在少数只读归档场景还能见到。",
+  "sections": [
+    {
+      "heading": "一句话理解：引擎决定表怎么存",
+      "text": "存储引擎是 MySQL 里负责「数据到底怎么写进磁盘、怎么读出来」的组件，它是插件式的，建表时用 ENGINE=InnoDB 指定，同一个库里不同表可以用不同引擎。你写的 SQL 大部分不变，但事务、锁、崩溃恢复这些能力由引擎决定。"
+    },
+    {
+      "heading": "InnoDB 为什么成为默认",
+      "text": "InnoDB 支持事务（一组操作要么全成要么全败）、行级锁和 MVCC（读不加锁也能看到一致性快照）、崩溃恢复（redo log 重放未落盘的数据）、聚簇索引（主键和数据存在一起）。5.5 之后它就是默认引擎，现代业务基本都用它。"
+    },
+    {
+      "heading": "MyISAM 为什么被淘汰",
+      "text": "MyISAM 只有表级锁，写一张表就把整张表锁住；不支持事务和崩溃恢复，进程崩溃后表可能损坏；只有索引缓存，数据缓存交给操作系统。它唯一的优势是简单、COUNT(*) 有行数缓存，适合只读统计表，但绝大多数场景已经被 InnoDB 取代。"
+    },
+    {
+      "heading": "其他引擎什么时候用",
+      "text": "Memory 引擎数据放内存，重启就丢，适合临时中间结果；Archive 引擎压缩存储，适合只写不读的日志归档；CSV 引擎把数据存成文本文件，方便和外部交换。业务主表一律 InnoDB，特殊引擎只在特定场景用。"
+    },
+    {
+      "heading": "引擎选错会付出什么代价",
+      "text": "在 MyISAM 表上做转账，第一条 UPDATE 成功、第二条失败，钱就丢了；混用 InnoDB 和 MyISAM 表做事务，MyISAM 部分不会回滚，数据会不一致；备份工具对非 InnoDB 表的支持也差。所以默认就用 InnoDB，历史 MyISAM 表要逐步迁过来。"
+    }
+  ],
+  "keyPoints": [
+    "存储引擎决定数据怎么存、是否支持事务和行锁。",
+    "InnoDB 是默认引擎：支持事务、行锁、MVCC、崩溃恢复。",
+    "MyISAM 只有表锁、不支持事务，崩溃后可能损坏。",
+    "Memory 引擎数据在内存，重启即丢；Archive 适合压缩归档。",
+    "建表用 ENGINE=InnoDB 明确指定，别依赖历史默认值。"
+  ],
+  "snippets": [
+    {
+      "title": "看看服务器支持哪些引擎",
+      "lang": "sql",
+      "code": "SHOW ENGINES;"
+    },
+    {
+      "title": "查当前库每张表用的引擎",
+      "lang": "sql",
+      "code": "SELECT TABLE_NAME, ENGINE, TABLE_ROWS\nFROM information_schema.TABLES\nWHERE TABLE_SCHEMA = DATABASE()\nORDER BY TABLE_NAME;"
+    },
+    {
+      "title": "建表时显式指定 InnoDB",
+      "lang": "sql",
+      "code": "CREATE TABLE orders_archive (\n  id BIGINT UNSIGNED NOT NULL,\n  user_id BIGINT UNSIGNED NOT NULL,\n  total_amount DECIMAL(10, 2) NOT NULL,\n  created_at DATETIME NOT NULL,\n  PRIMARY KEY (id),\n  KEY idx_created_at (created_at)\n) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;"
+    }
+  ],
+  "pitfalls": [
+    "以为所有表都支持事务：MyISAM 表上的 UPDATE 立即生效，出错也没法回滚。",
+    "只把默认引擎改了，却忘了检查存量表：老表可能还是 MyISAM。",
+    "以为 ALTER TABLE ... ENGINE=InnoDB 是免费的：它会重建整张表，大表要在低峰做。",
+    "在同一个事务里同时改 InnoDB 和 MyISAM 表，MyISAM 那部分不会回滚。"
+  ],
+  "enterprise": "企业规范通常要求全库 InnoDB，并治理历史 MyISAM 表；备份工具（如 XtraBackup）对 InnoDB 支持最好，能热备且保证一致性。上线前用 information_schema.TABLES 巡检一遍引擎，避免有漏网的老表在关键时刻掉链子。",
+  "related": [
+    "architecture",
+    "what-is-mysql",
+    "acid",
+    "mvcc"
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "id": "version-choice",
+  "titleZh": "版本选择：5.7 还是 8.0",
+  "title": "Choosing a version",
+  "chapter": "start",
+  "difficulty": 1,
+  "minutes": 8,
+  "summary": "选 MySQL 版本像选手机系统：5.7 是能用但停止更新的老系统，8.0 是当前长期支持主力，8.4 是新一代 LTS，9.x 是尝鲜版。新项目直接上 8.0 或 8.4，别再给 5.7 开新坑。",
+  "sections": [
+    {
+      "heading": "一句话理解：先看支持周期",
+      "text": "MySQL 5.7 已经在 2023 年 10 月停止官方支持（EOL），不再有安全补丁；8.0 是 LTS（长期支持）版本，生态最成熟；8.4 是更新的 LTS；9.x 属于创新版（innovation），生命周期短，适合尝鲜不适合长期生产。"
+    },
+    {
+      "heading": "8.0 比 5.7 多了什么",
+      "text": "窗口函数、CTE（WITH 子句）、原子 DDL、不可见索引、降序索引、角色权限、JSON 增强，还有默认 utf8mb4。很多以前要硬写子查询或应用层拼的逻辑，8.0 一句 SQL 就能表达。同时 8.0 移除了查询缓存，默认认证插件改成 caching_sha2_password。"
+    },
+    {
+      "heading": "升到 8.0 之前必须验证",
+      "text": "旧驱动可能不认 caching_sha2_password，要升级 JDBC 或客户端；保留字新增（如 rank、groups、system），列名撞上会报错；GROUP BY 不再隐式排序，依赖旧顺序的分页会乱；字符集默认变 utf8mb4，索引长度计算也跟着变。"
+    },
+    {
+      "heading": "8.4 和 9.x 怎么对待",
+      "text": "8.4 默认关闭 mysql_native_password，老客户端要改认证方式或升级驱动，新项目可以用。9.x 是创新版，特性新但支持周期短，跟它就意味着频繁升级，生产环境一般不把它当作基线。"
+    },
+    {
+      "heading": "选版本的实操建议",
+      "text": "新项目：8.0 的最新小版本或 8.4 LTS。老系统：先做升级检查（mysqlsh 的 check-for-server-upgrade），在从库和预发验证，再按从库到主库的顺序切换。云上：优先选云厂商托管版本，省掉运维，但要注意小版本锁定。"
+    }
+  ],
+  "keyPoints": [
+    "5.7 已 EOL，新项目不要再选；生产优先 8.0 或 8.4 LTS。",
+    "8.0 带窗口函数、CTE、原子 DDL，并移除查询缓存。",
+    "8.0 默认认证插件是 caching_sha2_password，老驱动可能连不上。",
+    "9.x 是创新版，生命周期短，适合尝鲜不适合做生产基线。",
+    "升级前先备份、跑升级检查、在从库和预发验证，再切主库。",
+    "8.4 默认关闭 mysql_native_password，老客户端要提前处理。"
+  ],
+  "snippets": [
+    {
+      "title": "看当前版本和发行信息",
+      "lang": "sql",
+      "code": "SELECT VERSION() AS version, @@version_comment AS edition;"
+    },
+    {
+      "title": "看账号用的认证插件（升级前必查）",
+      "lang": "sql",
+      "code": "SELECT user, host, plugin\nFROM mysql.user\nWHERE user = 'shop_app';"
+    },
+    {
+      "title": "只有 8.0 才有的窗口函数示例",
+      "lang": "sql",
+      "code": "SELECT id, user_id, total_amount,\n       ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) AS rn\nFROM orders;"
+    }
+  ],
+  "pitfalls": [
+    "以为版本号越大越稳：9.x 创新版生命周期短，企业别盲目跟风。",
+    "从 5.7 升 8.0 不做升级检查：保留字冲突、语法变化可能直接让服务起不来。",
+    "依赖 GROUP BY 的隐式排序：8.0 不再保证顺序，分页和报表会错乱。",
+    "备份文件跨大版本恢复：低版本不能直接恢复高版本备份，升级前要验证备份可恢复。"
+  ],
+  "enterprise": "版本要纳入统一管理：基线镜像锁定到具体小版本，升级走「备份 → 升级检查 → 从库验证 → 主库切换」流程，并持续关注官方 EOL 公告。云数据库虽然托管，但大版本升级同样要评估驱动、字符集和 SQL 兼容性。",
+  "related": [
+    "install-and-connect",
+    "architecture",
+    "charset-collation",
+    "online-ddl"
+  ]
+}

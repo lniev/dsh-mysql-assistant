@@ -1,0 +1,59 @@
+{
+  "id": "deep-pagination",
+  "titleZh": "深分页优化",
+  "title": "Deep pagination",
+  "chapter": "index",
+  "difficulty": 3,
+  "minutes": 12,
+  "summary": "深分页就像要从一本 1000 页的书里抄第 900 页，却必须从第 1 页一路翻过去：LIMIT 100000, 20 会先读出前 10 万行再全部丢掉，页数越深越慢。它不是因为索引坏了，而是 OFFSET 这个机制本身就要「先数过去」；解决办法是游标分页或延迟关联。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "LIMIT offset, size 的语义是「跳过 offset 行，再取 size 行」。MySQL 不能直接跳到第 offset 行，它必须沿着索引顺序把前 offset 行读出来再丢弃。翻到第 1 万页时，一个「只返回 20 条」的查询可能已经扫了几十万行，接口自然越来越慢。"
+    },
+    {
+      "heading": "方案一：游标分页（最优）",
+      "text": "不传页码，只传上一页最后一条记录的 id（或 (created_at, id) 组合），下一页写 WHERE id < last_id ORDER BY id DESC LIMIT 20。这样每次都能直接从索引定位，扫描行数恒定为 20 行左右。代价是不能随意跳页，适合「下拉加载更多」的场景。"
+    },
+    {
+      "heading": "方案二：延迟关联（保留页码）",
+      "text": "如果业务必须按页码跳转，可以用子查询先在索引上只取主键，再拿这 20 个主键回表取整行：SELECT o.* FROM orders o JOIN (SELECT id FROM orders ORDER BY id LIMIT 100000, 20) t ON o.id = t.id。子查询走覆盖索引，回表只发生 20 次，比整行扫 10 万行快很多。"
+    },
+    {
+      "heading": "方案三：限制+缓存+计数分离",
+      "text": "产品上可以限制最大页数（比如只允许看前 1000 页），或者改用搜索条件缩小范围；总数 COUNT(*) 单独缓存，不要每页都算。很多「深分页慢」本质是业务设计问题，技术方案只能缓解，改交互方式往往更彻底。"
+    }
+  ],
+  "keyPoints": [
+    "LIMIT offset, size 要先扫过 offset 行再丢弃，越翻越慢。",
+    "游标分页（WHERE id < last_id）扫描量恒定，是最优解，但不能跳页。",
+    "延迟关联先用覆盖索引取主键，再只回表取当前页的整行。",
+    "总条数单独统计或缓存，别每次分页都 COUNT(*)。",
+    "深分页有时是产品问题：限制可翻页深度或改成搜索更有效。"
+  ],
+  "snippets": [
+    {
+      "title": "慢：深 OFFSET 分页",
+      "lang": "sql",
+      "code": "-- 要扫过前 10 万行再丢掉，只为了返回 20 行\nEXPLAIN SELECT id, user_id, total_amount, created_at\nFROM orders\nORDER BY id\nLIMIT 100000, 20;"
+    },
+    {
+      "title": "延迟关联：先取主键再回表",
+      "lang": "sql",
+      "code": "SELECT o.id, o.user_id, o.total_amount, o.created_at\nFROM orders o\nJOIN (\n  SELECT id FROM orders ORDER BY id LIMIT 100000, 20\n) t ON t.id = o.id\nORDER BY o.id;"
+    },
+    {
+      "title": "游标分页：每次从上一页末尾继续",
+      "lang": "sql",
+      "code": "-- 第一页\nSELECT id, user_id, total_amount\nFROM orders\nORDER BY id DESC\nLIMIT 20;\n\n-- 下一页：假设上一页最后一条 id = 100000\nSELECT id, user_id, total_amount\nFROM orders\nWHERE id < 100000\nORDER BY id DESC\nLIMIT 20;"
+    }
+  ],
+  "pitfalls": [
+    "用 LIMIT 100000, 20 还指望加索引就变快：索引只能减少扫描的列数，跳不过前面 10 万行的读取。",
+    "游标分页用 (created_at) 单列做边界：同一时刻多条记录时会漏数据或重复，要加 id 组成 (created_at, id) 唯一边界。",
+    "每翻一页都执行 SELECT COUNT(*)：大表上 COUNT 本身就很贵，应该单独缓存或近似统计。",
+    "以为 MySQL 8.0 会自动优化深分页：8.0 没有跳过 OFFSET 的机制，还是得改 SQL 或改交互。"
+  ],
+  "enterprise": "企业里后台列表、订单流水这类接口普遍改成游标分页（传 last_id），并约定「不允许跳页」；需要页码的场景用延迟关联并限制最大页数。监控上会对分页接口的 P99 耗时单独打点，避免深分页在晚上批量导出时把主库 IO 打满。",
+  "related": ["covering-index", "composite-index", "explain", "slow-query-log", "index-design"]
+}

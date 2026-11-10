@@ -1,0 +1,67 @@
+{
+  "id": "architecture",
+  "titleZh": "MySQL 的架构分层",
+  "title": "MySQL architecture",
+  "chapter": "start",
+  "difficulty": 2,
+  "minutes": 15,
+  "summary": "MySQL 像一家餐厅：门口迎宾负责连接和验身份，服务员听懂你点单并规划上菜顺序，后厨负责真正取食材。对应就是连接层、Server 层、存储引擎层。分层的好处是换引擎不用改 SQL，出问题也能按层快速定位。",
+  "sections": [
+    {
+      "heading": "三层结构：前台、后厨、仓库",
+      "text": "连接层（Connection Layer）管连接、认证、权限；Server 层管 SQL 解析、优化、执行；存储引擎层管数据怎么存在磁盘上。三层之间职责清晰：你写一条 SQL，先过连接器，再进 Server 层被翻译成执行计划，最后交给 InnoDB 去读页。"
+    },
+    {
+      "heading": "连接层：验身份、管线程",
+      "text": "每来一个连接就分配一个线程（线程池模式下复用），校验账号密码、读出权限，之后这个连接的权限就固定了。连接空闲超过 wait_timeout 会被回收，max_connections 是并发上限。连不上、报 Too many connections，问题都在这一层。"
+    },
+    {
+      "heading": "Server 层：把 SQL 翻译成计划",
+      "text": "解析器先做词法和语法分析，看语句合不合法；预处理器检查表和列是否存在；优化器根据统计信息挑索引、决定多表 join 顺序；执行器按计划一行行调引擎取数据。8.0 已经移除查询缓存（query cache），别再靠 query_cache_size 调优。"
+    },
+    {
+      "heading": "存储引擎层：真正碰磁盘的地方",
+      "text": "InnoDB 负责 B+ 树索引、行锁、事务、redo/undo 日志和崩溃恢复；MyISAM 只管索引和数据文件，不支持事务。引擎是插件式的，建表时用 ENGINE=InnoDB 指定，换引擎不用改 SQL 写法。"
+    },
+    {
+      "heading": "分层对排查有什么实际用",
+      "text": "报 Can't connect 先看网络、端口、账号、max_connections；查得慢看 Server 层的执行计划，也就是 EXPLAIN 和索引；数据不一致或丢了看引擎层的事务、隔离级别、binlog 和备份。SHOW PROCESSLIST 看的是连接层，能立刻知道谁在占着连接。"
+    }
+  ],
+  "keyPoints": [
+    "MySQL 分连接层、Server 层、存储引擎层三部分。",
+    "连接层负责认证、权限和连接数控制，max_connections 是上限。",
+    "Server 层负责解析、优化、执行，8.0 已经没有查询缓存。",
+    "存储引擎层负责数据怎么落盘，InnoDB 支持事务和行锁。",
+    "排障按层定位：连不上看连接层，慢查询看 Server 层，数据异常看引擎层。"
+  ],
+  "snippets": [
+    {
+      "title": "看看现在有哪些连接在跑",
+      "lang": "sql",
+      "code": "SHOW PROCESSLIST;"
+    },
+    {
+      "title": "连接数与超时参数",
+      "lang": "sql",
+      "code": "SHOW VARIABLES WHERE Variable_name IN ('max_connections', 'wait_timeout', 'thread_cache_size');"
+    },
+    {
+      "title": "确认默认存储引擎",
+      "lang": "sql",
+      "code": "SHOW VARIABLES LIKE 'default_storage_engine';\nSELECT @@default_storage_engine AS engine;"
+    }
+  ],
+  "pitfalls": [
+    "以为 8.0 还能靠查询缓存加速：查询缓存已经删除，相关参数也移除了，调它是无效的。",
+    "以为所有引擎都支持事务：MyISAM 不支持事务也不支持行锁，转账类业务不能用它。",
+    "只会调大 max_connections：线程越多上下文切换越贵，连接池加合理超时才是正解。"
+  ],
+  "enterprise": "分层最大的价值在定位问题：连接报错查网络与账号，慢查询查执行计划，数据不一致查事务与日志。企业常在 Server 层外再套 ProxySQL 之类的代理做读写分离，但 SQL 仍由 MySQL 自己解析执行，理解分层才能判断问题到底在哪一层。",
+  "related": [
+    "storage-engines",
+    "sql-execution-path",
+    "connection-pool",
+    "monitoring"
+  ]
+}

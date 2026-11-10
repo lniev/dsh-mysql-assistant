@@ -1,0 +1,63 @@
+{
+  "id": "transaction-pitfalls",
+  "titleZh": "长事务与大事务的坑",
+  "title": "Transaction pitfalls",
+  "chapter": "transaction",
+  "difficulty": 3,
+  "minutes": 10,
+  "summary": "长事务像在收银台前推着整辆购物车慢慢结账：后面所有人都在等，收银台（行锁、连接、undo 版本）被一直占着。大事务则是一次改几百万行，中途失败要全部回滚、binlog 暴涨、主从延迟。真实事故里，「事务写得太长太大」比「隔离级别选错」常见得多。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "收银台只有一个：前面的人结账越慢，后面队伍越长。事务不提交，它持有的行锁、连接、undo 版本都不会释放，别人更新同一批行只能排队，purge 线程也清不掉旧版本。"
+    },
+    {
+      "heading": "长事务的连锁伤害",
+      "text": "行锁不释放，别人更新同行使等锁超时；undo 版本清不掉，表空间持续膨胀、查询越来越慢；占着元数据锁，DDL 排队并把后续查询一起堵住；连接被一直占用，连接池很快见底。一个 10 分钟的事务可能让整张表的写入瘫掉。"
+    },
+    {
+      "heading": "大事务的代价",
+      "text": "一次更新几百万行，回滚时间可能比执行还长，因为 InnoDB 要逆序撤销；binlog 一次写巨大，从库重放跟不上导致延迟；redo 和 undo 一起膨胀；锁范围大，阻塞面广；期间宕机恢复时间也会变长。大事务是复制延迟和磁盘告警的常见根源。"
+    },
+    {
+      "heading": "工程上的做法",
+      "text": "事务里只放必要的数据库操作：RPC、发消息、发短信、等用户输入统统放到事务外，用本地消息表保证最终一致。批量操作用循环分批，每批 500 到 1000 行单独提交。给语句设置 max_execution_time，给事务设置合理的锁等待超时。"
+    },
+    {
+      "heading": "怎么发现线上的长事务",
+      "text": "查 information_schema.innodb_trx，按 trx_started 排序，看运行超过 5 秒的事务和它正在执行的 SQL；再结合 performance_schema.events_statements_current 看语句。把这项检查做成监控和告警，比出事后再翻日志有效得多。"
+    }
+  ],
+  "keyPoints": [
+    "事务里不要做远程调用、发 MQ、等用户输入。",
+    "批量更新和删除要分批，每批单独提交。",
+    "长事务会挡住 purge，让 undo 和表空间一直涨。",
+    "监控 innodb_trx，把超过 5 秒的事务当异常处理。",
+    "大事务回滚可能比执行还慢，期间还会制造主从延迟。"
+  ],
+  "snippets": [
+    {
+      "title": "找出运行最久的事务",
+      "lang": "sql",
+      "code": "SELECT trx_id,\n       trx_mysql_thread_id,\n       trx_started,\n       TIMESTAMPDIFF(SECOND, trx_started, NOW()) AS seconds,\n       trx_rows_modified,\n       trx_query\nFROM information_schema.innodb_trx\nORDER BY trx_started\nLIMIT 5;"
+    },
+    {
+      "title": "分批删除，避免一个大事务",
+      "lang": "sql",
+      "code": "DELETE FROM orders\nWHERE status = 'cancelled'\nORDER BY id\nLIMIT 1000;\n-- 循环执行，直到影响行数为 0；每批单独提交"
+    },
+    {
+      "title": "给单条查询设超时，防止跑太久",
+      "lang": "sql",
+      "code": "SET SESSION max_execution_time = 2000;\nSELECT * FROM orders WHERE created_at < '2025-01-01';"
+    }
+  ],
+  "pitfalls": [
+    "把第三方支付回调、HTTP 请求写在事务里，网络抖动几秒，锁就持有几秒。",
+    "用一条 UPDATE 改上百万行，出问题回滚要几十分钟，期间业务全被拖住。",
+    "只监控慢查询不监控长事务：语句本身很快，但事务开着一直不提交。",
+    "ORM 的「自动事务」包住了整个请求处理，中间夹着 RPC，事务被无意拉长。"
+  ],
+  "enterprise": "上线前给事务定规矩：单事务涉及行数小于 1 万、执行时间小于 1 秒，禁止在事务里做网络调用；批量任务分批提交；用监控采集 innodb_trx 里最大的事务时长并设告警。这些规范比事后调参有用得多，也比换更强机器便宜。",
+  "related": ["acid", "mvcc", "lock-types", "deadlock", "slow-query-log"]
+}

@@ -1,0 +1,64 @@
+{
+  "id": "having",
+  "titleZh": "HAVING：分组后的筛选",
+  "title": "HAVING",
+  "chapter": "sql-basics",
+  "difficulty": 2,
+  "minutes": 10,
+  "summary": "HAVING 是「分组之后再挑组」：WHERE 挑行，HAVING 挑组。比如先按用户分组算出消费总额，再只留下总额超过 1 万的用户。像考试先算每个人总分，再筛出总分 600 分以上的——筛的是「人」，不是「单科成绩」。",
+  "sections": [
+    {
+      "heading": "一句话理解：WHERE 筛行，HAVING 筛组",
+      "text": "WHERE 在分组之前执行，过滤的是一行行原始数据；HAVING 在分组之后执行，过滤的是一组组汇总结果。判断一个条件该放哪：只跟单行有关（状态、金额、时间）放 WHERE；依赖聚合结果（总消费、订单数）放 HAVING。"
+    },
+    {
+      "heading": "怎么写",
+      "text": "SELECT 分组列, 聚合函数 FROM 表 WHERE 行条件 GROUP BY 分组列 HAVING 组条件 ORDER BY ... LIMIT ...。HAVING 里可以直接写聚合函数，也可以引用 SELECT 里的别名，例如 HAVING total > 10000，可读性更好。"
+    },
+    {
+      "heading": "执行顺序里的位置",
+      "text": "FROM → WHERE → GROUP BY → 聚合 → HAVING → SELECT → ORDER BY → LIMIT。HAVING 在 SELECT 之前、聚合之后，所以能拿到聚合结果，也就能过滤「总额超过多少」「订单数大于多少」这类组级条件。"
+    },
+    {
+      "heading": "能放 WHERE 就别放 HAVING",
+      "text": "HAVING status = 'paid' 这种写法能跑，但语义是把所有行先分组、再过滤组，比 WHERE 晚一步，性能更差。行级条件放 WHERE，数据库可以更早用索引减少数据量，后面的分组也更快。"
+    },
+    {
+      "heading": "TopN 报表的标准组合",
+      "text": "先 WHERE 限定时间范围，再 GROUP BY 分组，HAVING 过滤掉小客户，最后 ORDER BY 聚合值 DESC 加 LIMIT 取 TopN。这是电商日报、商户排行、渠道分析里最常见的 SQL 结构。"
+    }
+  ],
+  "keyPoints": [
+    "WHERE 在分组前过滤行，HAVING 在分组后过滤组。",
+    "HAVING 里可以用聚合函数和 SELECT 别名。",
+    "能用 WHERE 过滤的条件不要放到 HAVING，因为 WHERE 更早执行、数据量更小。",
+    "没有 GROUP BY 时 HAVING 会把整表当成一组。",
+    "HAVING 过滤后配合 ORDER BY 加 LIMIT 就是 TopN 报表。",
+    "HAVING 引用非聚合列时，该列必须出现在 GROUP BY 里。"
+  ],
+  "snippets": [
+    {
+      "title": "消费超过 1 万的用户",
+      "lang": "sql",
+      "code": "SELECT user_id, SUM(total_amount) AS total\nFROM orders\nWHERE status = 'paid'\nGROUP BY user_id\nHAVING total > 10000\nORDER BY total DESC;"
+    },
+    {
+      "title": "商品数不少于 5 个的分类",
+      "lang": "sql",
+      "code": "SELECT category_id, COUNT(*) AS product_cnt\nFROM products\nWHERE on_sale = 1\nGROUP BY category_id\nHAVING product_cnt >= 5;"
+    }
+  ],
+  "pitfalls": [
+    "把行级条件写进 HAVING：能跑，但分组之后再过滤，白白多处理数据。",
+    "HAVING 引用了没在 GROUP BY 里的普通列：ONLY_FULL_GROUP_BY 下直接报错。",
+    "忘了 HAVING 作用于组：写 HAVING total_amount > 100 却没用聚合，语义混乱。",
+    "以为 HAVING 可以脱离 GROUP BY：不分组时整表是一组，HAVING 只过滤这一组，结果往往不是你以为的。"
+  ],
+  "enterprise": "报表 TopN 有标准写法：WHERE 限定范围、GROUP BY 分组、HAVING 过滤组、ORDER BY 聚合值、LIMIT 取前 N 条。HAVING 条件尽量用聚合别名，便于评审；大表避免「无 WHERE 的 GROUP BY 加 HAVING」，先缩小范围再统计。",
+  "related": [
+    "group-by",
+    "aggregate-functions",
+    "where-filter",
+    "order-limit"
+  ]
+}

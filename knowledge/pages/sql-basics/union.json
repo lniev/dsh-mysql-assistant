@@ -1,0 +1,63 @@
+{
+  "id": "union",
+  "titleZh": "UNION：结果上下拼接",
+  "title": "UNION",
+  "chapter": "sql-basics",
+  "difficulty": 2,
+  "minutes": 8,
+  "summary": "UNION 是「把两个查询结果上下摞起来」：像把北京仓和上海仓的库存清单拼成一张总表，行数相加、列数必须一样。UNION 默认会去重（像合并同类项），UNION ALL 则原样保留，速度更快。",
+  "sections": [
+    {
+      "heading": "一句话理解：上下拼接",
+      "text": "UNION 把两个 SELECT 的结果上下拼在一起，要求列数相同、对应列类型兼容，最终列名取第一个 SELECT 的别名。它和 JOIN 的方向相反：JOIN 是横向加列，UNION 是纵向加行。"
+    },
+    {
+      "heading": "UNION 和 UNION ALL 的区别",
+      "text": "UNION 会对合并后的结果去重，内部要排序或建临时表，有额外开销；UNION ALL 原样拼接，不去重、快得多。只要业务上不需要去重（比如两个时间段的订单本来就不重叠），就应该用 UNION ALL。"
+    },
+    {
+      "heading": "规则和写法",
+      "text": "每个 SELECT 的列数必须一致，顺序要对应；最终 ORDER BY 和 LIMIT 写在整个 UNION 的最后，作用于合并后的结果，而不是某一个 SELECT。想给结果加来源标记，就在每个 SELECT 里写一个常量列，如 'archived' AS source。"
+    },
+    {
+      "heading": "典型场景",
+      "text": "归档表加当前表一起查、多个业务来源统一成一张报表、在 MySQL 里模拟 FULL OUTER JOIN。它也很适合「一次查询多个互斥条件」：已支付订单和已发货订单各查一段，再拼起来统一排序。"
+    },
+    {
+      "heading": "能不 UNION 就不 UNION",
+      "text": "同一个表里只是条件不同，用 OR 往往就够了，还能少扫一遍表；两次查询在应用层合并也是一种选择，但要小心排序和分页。UNION 用得越多，优化器越难估算，SQL 也越难维护。"
+    }
+  ],
+  "keyPoints": [
+    "UNION 上下拼结果，要求列数相同、类型兼容。",
+    "UNION 会去重，UNION ALL 不去重、通常更快。",
+    "最终列名由第一个 SELECT 决定，ORDER BY 和 LIMIT 写在整个 UNION 最后。",
+    "没有去重需求就用 UNION ALL，别让数据库白白排序。",
+    "MySQL 没有 FULL OUTER JOIN，用 LEFT UNION RIGHT 模拟。",
+    "同表不同条件优先考虑 OR，UNION 会让 SQL 更难维护。"
+  ],
+  "snippets": [
+    {
+      "title": "两个分类的商品拼一起",
+      "lang": "sql",
+      "code": "SELECT id, name, price FROM products WHERE category_id = 1\nUNION ALL\nSELECT id, name, price FROM products WHERE category_id = 2;"
+    },
+    {
+      "title": "加来源标记并按时间排序",
+      "lang": "sql",
+      "code": "SELECT id, user_id, total_amount, created_at, 'paid' AS stage\nFROM orders\nWHERE status = 'paid'\nUNION ALL\nSELECT id, user_id, total_amount, created_at, 'shipped' AS stage\nFROM orders\nWHERE status = 'shipped'\nORDER BY created_at DESC\nLIMIT 20;"
+    }
+  ],
+  "pitfalls": [
+    "列数或顺序不一致：直接报 The used SELECT statements have a different number of columns。",
+    "以为 UNION 保留重复：默认去重，要保留用 UNION ALL。",
+    "在每个 SELECT 里各写 ORDER BY：最终顺序没有保证，应该写在整个 UNION 最后。",
+    "UNION 结果列名取第一个查询，后面查询的别名不生效，接口字段可能对不上。"
+  ],
+  "enterprise": "归档表拆分后查询要 UNION ALL 并带时间范围，避免两个大表各自全扫；报表层统一字段类型和顺序，防止隐式转换；能单表 OR 解决的别 UNION，减少扫描次数；UNION 查询记得看 EXPLAIN 里有没有临时表。",
+  "related": [
+    "select-basics",
+    "subquery",
+    "order-limit"
+  ]
+}

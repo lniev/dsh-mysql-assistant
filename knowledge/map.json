@@ -1,0 +1,796 @@
+{
+  "titleZh": "MySQL 知识地图",
+  "intro": "83 个知识点按依赖关系排成五层：先建立直觉，再练 SQL，然后学设计与优化，最后进入生产架构与企业实战。点击任意节点查看通俗讲解，箭头指向它依赖的前置知识。",
+  "layers": [
+    {
+      "id": "foundation",
+      "titleZh": "① 建立直觉",
+      "description": "先知道 MySQL 是什么、一条 SQL 怎么被执行、表存在哪里，再动手写第一条查询。"
+    },
+    {
+      "id": "sql",
+      "titleZh": "② SQL 能力",
+      "description": "查询、聚合、多表、写入，以及把数据放进结构合理的表里。"
+    },
+    {
+      "id": "optimize",
+      "titleZh": "③ 设计与优化",
+      "description": "索引、执行计划、事务与锁：从「能跑」到「跑得快、写得对」。"
+    },
+    {
+      "id": "production",
+      "titleZh": "④ 生产与架构",
+      "description": "复制、读写分离、分库分表、备份恢复、权限与安全，让数据库扛住真实业务。"
+    },
+    {
+      "id": "enterprise",
+      "titleZh": "⑤ 企业实战",
+      "description": "电商、库存、订单幂等、报表等真实场景的完整打法与检查清单。"
+    }
+  ],
+  "nodes": [
+    {
+      "pageId": "what-is-mysql",
+      "deps": [],
+      "tag": "必读"
+    },
+    {
+      "pageId": "install-and-connect",
+      "deps": [
+        "what-is-mysql"
+      ],
+      "tag": "上手"
+    },
+    {
+      "pageId": "architecture",
+      "deps": [
+        "what-is-mysql",
+        "install-and-connect"
+      ],
+      "tag": "架构"
+    },
+    {
+      "pageId": "sql-execution-path",
+      "deps": [
+        "architecture",
+        "what-is-mysql"
+      ],
+      "tag": "执行流程"
+    },
+    {
+      "pageId": "storage-engines",
+      "deps": [
+        "architecture",
+        "sql-execution-path"
+      ],
+      "tag": "引擎"
+    },
+    {
+      "pageId": "first-database",
+      "deps": [
+        "install-and-connect",
+        "what-is-mysql"
+      ],
+      "tag": "上手"
+    },
+    {
+      "pageId": "charset-collation",
+      "deps": [
+        "first-database",
+        "install-and-connect"
+      ],
+      "tag": "字符集"
+    },
+    {
+      "pageId": "version-choice",
+      "deps": [
+        "what-is-mysql",
+        "install-and-connect"
+      ],
+      "tag": "选型"
+    },
+    {
+      "pageId": "select-basics",
+      "deps": [
+        "what-is-mysql",
+        "first-database"
+      ],
+      "tag": "基础"
+    },
+    {
+      "pageId": "where-filter",
+      "deps": [
+        "select-basics",
+        "what-is-mysql"
+      ],
+      "tag": "高频"
+    },
+    {
+      "pageId": "null-handling",
+      "deps": [
+        "where-filter",
+        "select-basics"
+      ],
+      "tag": "容易错"
+    },
+    {
+      "pageId": "order-limit",
+      "deps": [
+        "select-basics",
+        "where-filter"
+      ],
+      "tag": "分页"
+    },
+    {
+      "pageId": "distinct",
+      "deps": [
+        "select-basics",
+        "where-filter"
+      ],
+      "tag": "去重"
+    },
+    {
+      "pageId": "expressions-aliases",
+      "deps": [
+        "select-basics",
+        "data-types"
+      ],
+      "tag": "表达式"
+    },
+    {
+      "pageId": "aggregate-functions",
+      "deps": [
+        "select-basics",
+        "where-filter"
+      ],
+      "tag": "聚合"
+    },
+    {
+      "pageId": "group-by",
+      "deps": [
+        "aggregate-functions",
+        "select-basics"
+      ],
+      "tag": "统计"
+    },
+    {
+      "pageId": "having",
+      "deps": [
+        "group-by",
+        "aggregate-functions"
+      ],
+      "tag": "分组"
+    },
+    {
+      "pageId": "join-inner",
+      "deps": [
+        "select-basics",
+        "where-filter",
+        "create-table",
+        "primary-key"
+      ],
+      "tag": "高频"
+    },
+    {
+      "pageId": "join-outer",
+      "deps": [
+        "join-inner",
+        "where-filter"
+      ],
+      "tag": "多表"
+    },
+    {
+      "pageId": "subquery",
+      "deps": [
+        "select-basics",
+        "join-inner"
+      ],
+      "tag": "进阶"
+    },
+    {
+      "pageId": "union",
+      "deps": [
+        "select-basics",
+        "where-filter"
+      ],
+      "tag": "拼接"
+    },
+    {
+      "pageId": "insert",
+      "deps": [
+        "create-table",
+        "data-types"
+      ],
+      "tag": "写入"
+    },
+    {
+      "pageId": "update",
+      "deps": [
+        "insert",
+        "where-filter"
+      ],
+      "tag": "写入"
+    },
+    {
+      "pageId": "delete",
+      "deps": [
+        "update",
+        "where-filter"
+      ],
+      "tag": "删除"
+    },
+    {
+      "pageId": "data-types",
+      "deps": [
+        "first-database",
+        "what-is-mysql"
+      ],
+      "tag": "类型"
+    },
+    {
+      "pageId": "naming-conventions",
+      "deps": [
+        "first-database",
+        "what-is-mysql"
+      ],
+      "tag": "规范"
+    },
+    {
+      "pageId": "create-table",
+      "deps": [
+        "first-database",
+        "data-types",
+        "naming-conventions"
+      ],
+      "tag": "建表"
+    },
+    {
+      "pageId": "decimal-money",
+      "deps": [
+        "data-types",
+        "create-table"
+      ],
+      "tag": "金额"
+    },
+    {
+      "pageId": "time-types",
+      "deps": [
+        "data-types",
+        "create-table"
+      ],
+      "tag": "时间"
+    },
+    {
+      "pageId": "primary-key",
+      "deps": [
+        "create-table",
+        "data-types"
+      ],
+      "tag": "主键"
+    },
+    {
+      "pageId": "auto-increment",
+      "deps": [
+        "primary-key",
+        "create-table"
+      ],
+      "tag": "自增"
+    },
+    {
+      "pageId": "foreign-key",
+      "deps": [
+        "create-table",
+        "primary-key"
+      ],
+      "tag": "约束"
+    },
+    {
+      "pageId": "unique-check-default",
+      "deps": [
+        "create-table",
+        "primary-key"
+      ],
+      "tag": "约束"
+    },
+    {
+      "pageId": "normalization",
+      "deps": [
+        "create-table",
+        "foreign-key",
+        "primary-key"
+      ],
+      "tag": "范式"
+    },
+    {
+      "pageId": "json-type",
+      "deps": [
+        "data-types",
+        "create-table"
+      ],
+      "tag": "灵活"
+    },
+    {
+      "pageId": "soft-delete",
+      "deps": [
+        "create-table",
+        "update"
+      ],
+      "tag": "状态"
+    },
+    {
+      "pageId": "index-concept",
+      "deps": [
+        "select-basics",
+        "where-filter",
+        "create-table"
+      ],
+      "tag": "索引"
+    },
+    {
+      "pageId": "btree-index",
+      "deps": [
+        "index-concept",
+        "data-types"
+      ],
+      "tag": "原理"
+    },
+    {
+      "pageId": "clustered-index",
+      "deps": [
+        "btree-index",
+        "primary-key"
+      ],
+      "tag": "原理"
+    },
+    {
+      "pageId": "secondary-index",
+      "deps": [
+        "clustered-index",
+        "index-concept"
+      ],
+      "tag": "回表"
+    },
+    {
+      "pageId": "composite-index",
+      "deps": [
+        "secondary-index",
+        "where-filter"
+      ],
+      "tag": "最左前缀"
+    },
+    {
+      "pageId": "covering-index",
+      "deps": [
+        "secondary-index",
+        "composite-index"
+      ],
+      "tag": "覆盖"
+    },
+    {
+      "pageId": "explain",
+      "deps": [
+        "index-concept",
+        "select-basics"
+      ],
+      "tag": "诊断"
+    },
+    {
+      "pageId": "index-failure",
+      "deps": [
+        "composite-index",
+        "covering-index",
+        "expressions-aliases"
+      ],
+      "tag": "容易错"
+    },
+    {
+      "pageId": "slow-query-log",
+      "deps": [
+        "explain",
+        "index-concept"
+      ],
+      "tag": "排查"
+    },
+    {
+      "pageId": "optimizer-stats",
+      "deps": [
+        "explain",
+        "btree-index"
+      ],
+      "tag": "优化器"
+    },
+    {
+      "pageId": "index-design",
+      "deps": [
+        "composite-index",
+        "covering-index",
+        "index-failure"
+      ],
+      "tag": "实战"
+    },
+    {
+      "pageId": "deep-pagination",
+      "deps": [
+        "order-limit",
+        "composite-index",
+        "covering-index"
+      ],
+      "tag": "深分页"
+    },
+    {
+      "pageId": "acid",
+      "deps": [
+        "update",
+        "insert"
+      ],
+      "tag": "核心"
+    },
+    {
+      "pageId": "undo-redo-log",
+      "deps": [
+        "acid",
+        "insert"
+      ],
+      "tag": "日志"
+    },
+    {
+      "pageId": "binlog",
+      "deps": [
+        "undo-redo-log",
+        "acid"
+      ],
+      "tag": "日志"
+    },
+    {
+      "pageId": "isolation-levels",
+      "deps": [
+        "acid",
+        "undo-redo-log"
+      ],
+      "tag": "隔离"
+    },
+    {
+      "pageId": "mvcc",
+      "deps": [
+        "isolation-levels",
+        "undo-redo-log"
+      ],
+      "tag": "难点"
+    },
+    {
+      "pageId": "lock-types",
+      "deps": [
+        "acid",
+        "isolation-levels"
+      ],
+      "tag": "加锁"
+    },
+    {
+      "pageId": "gap-lock",
+      "deps": [
+        "lock-types",
+        "mvcc",
+        "isolation-levels"
+      ],
+      "tag": "幻读"
+    },
+    {
+      "pageId": "deadlock",
+      "deps": [
+        "lock-types",
+        "gap-lock"
+      ],
+      "tag": "容易错"
+    },
+    {
+      "pageId": "optimistic-pessimistic",
+      "deps": [
+        "lock-types",
+        "update"
+      ],
+      "tag": "并发"
+    },
+    {
+      "pageId": "transaction-pitfalls",
+      "deps": [
+        "acid",
+        "lock-types",
+        "undo-redo-log"
+      ],
+      "tag": "踩坑"
+    },
+    {
+      "pageId": "replication",
+      "deps": [
+        "binlog",
+        "architecture"
+      ],
+      "tag": "高可用"
+    },
+    {
+      "pageId": "read-write-split",
+      "deps": [
+        "replication",
+        "binlog"
+      ],
+      "tag": "读写分离"
+    },
+    {
+      "pageId": "group-replication",
+      "deps": [
+        "replication",
+        "read-write-split"
+      ],
+      "tag": "高可用"
+    },
+    {
+      "pageId": "sharding",
+      "deps": [
+        "index-design",
+        "replication"
+      ],
+      "tag": "分片"
+    },
+    {
+      "pageId": "sharding-middleware",
+      "deps": [
+        "sharding",
+        "composite-index"
+      ],
+      "tag": "路由"
+    },
+    {
+      "pageId": "backup-restore",
+      "deps": [
+        "binlog",
+        "replication"
+      ],
+      "tag": "备份"
+    },
+    {
+      "pageId": "migration",
+      "deps": [
+        "backup-restore",
+        "replication",
+        "online-ddl"
+      ],
+      "tag": "迁移"
+    },
+    {
+      "pageId": "cache-redis",
+      "deps": [
+        "read-write-split",
+        "mvcc"
+      ],
+      "tag": "缓存"
+    },
+    {
+      "pageId": "capacity-planning",
+      "deps": [
+        "index-design",
+        "replication"
+      ],
+      "tag": "容量"
+    },
+    {
+      "pageId": "user-privileges",
+      "deps": [
+        "install-and-connect",
+        "what-is-mysql"
+      ],
+      "tag": "安全"
+    },
+    {
+      "pageId": "sql-injection",
+      "deps": [
+        "select-basics",
+        "user-privileges"
+      ],
+      "tag": "安全"
+    },
+    {
+      "pageId": "data-masking",
+      "deps": [
+        "user-privileges",
+        "data-types"
+      ],
+      "tag": "脱敏"
+    },
+    {
+      "pageId": "audit",
+      "deps": [
+        "user-privileges",
+        "binlog"
+      ],
+      "tag": "审计"
+    },
+    {
+      "pageId": "monitoring",
+      "deps": [
+        "slow-query-log",
+        "user-privileges"
+      ],
+      "tag": "监控"
+    },
+    {
+      "pageId": "config-tuning",
+      "deps": [
+        "architecture",
+        "monitoring"
+      ],
+      "tag": "调参"
+    },
+    {
+      "pageId": "connection-pool",
+      "deps": [
+        "architecture",
+        "monitoring"
+      ],
+      "tag": "连接池"
+    },
+    {
+      "pageId": "online-ddl",
+      "deps": [
+        "create-table",
+        "index-design"
+      ],
+      "tag": "变更"
+    },
+    {
+      "pageId": "ecommerce-schema",
+      "deps": [
+        "normalization",
+        "create-table",
+        "decimal-money"
+      ],
+      "tag": "电商"
+    },
+    {
+      "pageId": "inventory-oversell",
+      "deps": [
+        "optimistic-pessimistic",
+        "update",
+        "ecommerce-schema"
+      ],
+      "tag": "超卖"
+    },
+    {
+      "pageId": "order-idempotency",
+      "deps": [
+        "unique-check-default",
+        "insert",
+        "ecommerce-schema"
+      ],
+      "tag": "幂等"
+    },
+    {
+      "pageId": "hot-account",
+      "deps": [
+        "optimistic-pessimistic",
+        "transaction-pitfalls",
+        "update"
+      ],
+      "tag": "热点"
+    },
+    {
+      "pageId": "report-queries",
+      "deps": [
+        "group-by",
+        "join-inner",
+        "order-limit"
+      ],
+      "tag": "报表"
+    },
+    {
+      "pageId": "outbox-consistency",
+      "deps": [
+        "binlog",
+        "order-idempotency",
+        "ecommerce-schema"
+      ],
+      "tag": "一致性"
+    },
+    {
+      "pageId": "multi-tenant",
+      "deps": [
+        "sharding",
+        "ecommerce-schema",
+        "user-privileges"
+      ],
+      "tag": "多租户"
+    },
+    {
+      "pageId": "data-archiving",
+      "deps": [
+        "deep-pagination",
+        "backup-restore",
+        "soft-delete"
+      ],
+      "tag": "归档"
+    }
+  ],
+  "paths": [
+    {
+      "id": "quickstart",
+      "titleZh": "7 天 SQL 入门",
+      "description": "只学最常用的查询与写入，一周能独立查数据、改数据，够应付日常取数。",
+      "pageIds": [
+        "what-is-mysql",
+        "install-and-connect",
+        "first-database",
+        "select-basics",
+        "where-filter",
+        "order-limit",
+        "insert",
+        "update"
+      ]
+    },
+    {
+      "id": "sql-craft",
+      "titleZh": "查询与统计能手",
+      "description": "面向做业务报表、写后台查询的同学：把聚合、分组、多表连接练到不用翻手册。",
+      "pageIds": [
+        "select-basics",
+        "where-filter",
+        "aggregate-functions",
+        "group-by",
+        "having",
+        "join-inner",
+        "join-outer",
+        "subquery",
+        "order-limit",
+        "union"
+      ]
+    },
+    {
+      "id": "schema-defense",
+      "titleZh": "表设计与索引防线",
+      "description": "先设计好表，再设计索引：让后面的查询、对账、扩展都不返工。",
+      "pageIds": [
+        "create-table",
+        "data-types",
+        "decimal-money",
+        "primary-key",
+        "foreign-key",
+        "normalization",
+        "index-concept",
+        "composite-index",
+        "index-design"
+      ]
+    },
+    {
+      "id": "performance",
+      "titleZh": "性能优化专项",
+      "description": "从慢查询日志到执行计划，再到索引改造与深分页，一条完整的优化链路。",
+      "pageIds": [
+        "index-concept",
+        "btree-index",
+        "secondary-index",
+        "composite-index",
+        "covering-index",
+        "explain",
+        "index-failure",
+        "slow-query-log",
+        "deep-pagination",
+        "optimizer-stats"
+      ]
+    },
+    {
+      "id": "interview",
+      "titleZh": "面试冲刺",
+      "description": "把面试官最爱问的事务、MVCC、锁、binlog、复制串成一条能讲清楚的线。",
+      "pageIds": [
+        "acid",
+        "undo-redo-log",
+        "binlog",
+        "isolation-levels",
+        "mvcc",
+        "lock-types",
+        "gap-lock",
+        "deadlock",
+        "replication",
+        "read-write-split"
+      ]
+    }
+  ]
+}

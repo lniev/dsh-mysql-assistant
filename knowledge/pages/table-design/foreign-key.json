@@ -1,0 +1,50 @@
+{
+  "id": "foreign-key",
+  "titleZh": "外键与数据完整性",
+  "title": "Foreign keys",
+  "chapter": "table-design",
+  "difficulty": 3,
+  "minutes": 15,
+  "summary": "外键就是表与表之间的「门禁」：订单里的 user_id 必须真的能在 users 表里找到这个人，否则数据库直接拒绝写入。它像超市结账前扫会员卡，卡不存在就不让走流程。外键能在数据库层挡住脏数据，但互联网业务里也常被刻意不用，需要知道什么时候该用。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "外键（FOREIGN KEY）是子表里指向父表主键的一列，数据库会保证：插入子表时父表必须有对应行；父表被删除或修改时，按你设置的规则处理子表。它把「引用关系」变成数据库能检查的硬约束，而不是靠应用代码自觉。"
+    },
+    {
+      "heading": "ON DELETE / ON UPDATE 怎么选",
+      "text": "RESTRICT 是默认值，父表还有子行时禁止删除；CASCADE 会连子行一起删，很危险，业务表几乎不这么用；SET NULL 把子表的引用列置空，要求该列允许 NULL。最常用的其实是 RESTRICT，先把关联数据处理干净，再删父表。"
+    },
+    {
+      "heading": "为什么很多互联网公司不用外键",
+      "text": "外键会在每次写入时检查另一张表，并可能加锁，高并发下影响写入性能；分库分表后父子表不在同一实例，数据库也没法约束。于是常见做法是「逻辑外键」：列上建普通索引，由应用层或定时任务校验一致性，同时用监控发现孤儿数据。"
+    }
+  ],
+  "keyPoints": [
+    "外键保证子表引用的父表记录一定存在。",
+    "默认行为 RESTRICT：父表被引用时不允许删除。",
+    "CASCADE 会连带删子表数据，生产环境慎用。",
+    "外键列要建索引，否则父表删除时检查子表会全表扫描。",
+    "分库分表后外键失效，只能靠应用层逻辑保证。"
+  ],
+  "snippets": [
+    {
+      "title": "订单项通过外键关联订单",
+      "lang": "sql",
+      "code": "CREATE TABLE order_items (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  order_id BIGINT UNSIGNED NOT NULL,\n  product_id BIGINT UNSIGNED NOT NULL,\n  quantity INT NOT NULL DEFAULT 1,\n  unit_price DECIMAL(12,2) NOT NULL,\n  PRIMARY KEY (id),\n  KEY idx_order (order_id),\n  CONSTRAINT fk_items_order FOREIGN KEY (order_id)\n    REFERENCES orders (id) ON DELETE RESTRICT ON UPDATE RESTRICT\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+    },
+    {
+      "title": "插入父表不存在的引用会被拒绝",
+      "lang": "sql",
+      "code": "INSERT INTO order_items (order_id, product_id, quantity, unit_price)\nVALUES (999999999, 1, 2, 39.90);"
+    }
+  ],
+  "pitfalls": [
+    "外键列没建索引：删除父表记录时，InnoDB 要扫子表确认有没有引用，大表上会锁很久。",
+    "用了 ON DELETE CASCADE 却以为只是逻辑删除：父行一删，子行全没了，很难恢复。",
+    "外键约束和逻辑删除冲突：软删除的父行还在，新子行照样能插入，看起来「删了」却还能挂新数据。",
+    "迁移或清库时先删父表数据：会被 RESTRICT 挡住，报 Cannot delete or update a parent row。"
+  ],
+  "enterprise": "互联网业务更常见的是逻辑外键：数据库只建索引，应用层保证顺序和存在性，靠离线核对任务查孤儿数据。强一致要求高的系统（财务、ERP）则保留物理外键，用数据库兜底。选哪种要看团队能否接受「脏数据靠巡检发现」。",
+  "related": ["create-table", "primary-key", "soft-delete", "normalization", "lock-types"]
+}

@@ -1,0 +1,69 @@
+{
+  "id": "order-limit",
+  "titleZh": "ORDER BY 与 LIMIT：排序与分页",
+  "title": "ORDER BY & LIMIT",
+  "chapter": "sql-basics",
+  "difficulty": 1,
+  "minutes": 12,
+  "summary": "ORDER BY 是给结果排队，LIMIT 是只让前 N 个上车。像餐厅等位：ORDER BY 按取号时间排好队，LIMIT 20 OFFSET 40 是跳过前 40 个再取 20 个。注意：没有 ORDER BY 的 LIMIT 相当于随机抽签，每次结果都可能不一样。",
+  "sections": [
+    {
+      "heading": "一句话理解：排序 + 限量",
+      "text": "ORDER BY 决定行的顺序，可以多列：ORDER BY created_at DESC, id DESC，前一个字段相同时才用后一个。LIMIT 决定返回几行，写法有 LIMIT 20、LIMIT 20 OFFSET 40 和 LIMIT 40, 20，后两种等价，都是跳过 40 行再取 20 行。"
+    },
+    {
+      "heading": "分页为什么越翻越慢",
+      "text": "LIMIT 100000, 20 不是直接跳到第 10 万行，而是先读出 100020 行，再把前 10 万行扔掉。页码越大扫得越多，这就是深分页慢的根因。解决办法是记住上一页最后一条的 id，用 WHERE id > 上一页最后 id 继续取，或者先分页主键再关联取详情。"
+    },
+    {
+      "heading": "排序键要唯一、要稳定",
+      "text": "如果只按 created_at 排序，同一秒的多条订单顺序不确定，翻页时可能重复或漏数据。加上唯一键做第二排序（ORDER BY created_at DESC, id DESC）就能稳定；用游标法分页时，游标列也必须是唯一的。"
+    },
+    {
+      "heading": "排序什么时候用不上索引",
+      "text": "排序字段和过滤字段不一致、多个排序字段方向混用、排序前对列套了函数、或者数据量太大优化器觉得走索引更贵，都会出现 Using filesort。用 EXPLAIN 看 Extra 里有没有 filesort，有就考虑按「等值条件列 + 排序列」的顺序建联合索引。"
+    },
+    {
+      "heading": "LIMIT 不是万能性能开关",
+      "text": "LIMIT 只是少返回行，不代表少扫描行。没有合适索引时，它照样全表扫。判断有没有真的少扫描，要看 EXPLAIN 里的 rows，而不是 LIMIT 后面的数字。导出、报表这类大查询不要靠 LIMIT 硬扛，应该异步化、走从库，或者用主键范围分批拉取。"
+    }
+  ],
+  "keyPoints": [
+    "ORDER BY 排序，LIMIT 限量；LIMIT 40, 20 是跳过 40 行取 20 行。",
+    "不写 ORDER BY 时，LIMIT 结果的顺序没有保证。",
+    "深分页（OFFSET 很大）会越翻越慢，改用「记住上一页最后 id」的游标法。",
+    "分页排序键要唯一（如加 id），否则会重复或漏行。",
+    "排序最好和索引顺序一致，否则 EXPLAIN 里会出现 Using filesort。",
+    "LIMIT 只减少返回行数，不减少扫描行数，别把它当性能优化。"
+  ],
+  "snippets": [
+    {
+      "title": "按时间倒序取最新订单",
+      "lang": "sql",
+      "code": "SELECT id, user_id, total_amount, created_at\nFROM orders\nWHERE status = 'paid'\nORDER BY created_at DESC, id DESC\nLIMIT 20 OFFSET 0;"
+    },
+    {
+      "title": "游标分页：从上一页最后一条之后继续取",
+      "lang": "sql",
+      "code": "SELECT id, user_id, total_amount, created_at\nFROM orders\nWHERE status = 'paid'\n  AND id > 10240\nORDER BY id ASC\nLIMIT 20;"
+    },
+    {
+      "title": "延迟关联优化深分页",
+      "lang": "sql",
+      "code": "SELECT o.id, o.user_id, o.total_amount, o.created_at\nFROM orders o\nJOIN (\n  SELECT id\n  FROM orders\n  WHERE status = 'paid'\n  ORDER BY created_at DESC, id DESC\n  LIMIT 20 OFFSET 5000\n) t ON t.id = o.id;"
+    }
+  ],
+  "pitfalls": [
+    "把 LIMIT 10, 20 理解成第 10 到 20 行：其实是跳过 10 行再取 20 行。",
+    "排序键不唯一还做分页：翻页时同一行重复出现，或者某些行永远看不到。",
+    "ORDER BY RAND() 随机取数：会对全表排序，大表直接拖垮。",
+    "ORDER BY 里对列用函数或表达式，索引失效变成 filesort。"
+  ],
+  "enterprise": "列表接口必须带稳定排序（时间加唯一键），深分页改成游标法或限制最大页数；报表导出走异步任务和从库；ORDER BY 字段尽量落在索引里，出现 filesort 要先评估量级，别等用户翻到第 1000 页才发现数据库扛不住。",
+  "related": [
+    "select-basics",
+    "where-filter",
+    "index-design",
+    "deep-pagination"
+  ]
+}

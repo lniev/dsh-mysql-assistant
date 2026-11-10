@@ -1,0 +1,63 @@
+{
+  "id": "gap-lock",
+  "titleZh": "间隙锁与幻读",
+  "title": "Gap locks",
+  "chapter": "transaction",
+  "difficulty": 4,
+  "minutes": 15,
+  "summary": "间隙锁锁的不是某一行，而是两行记录之间的「空位」。像书架上两本书之间的空隙也被占住，别人不能往这里插新书。它的目的是防幻读：同一个事务两次按范围查，不能让别的事务在中间插入新行。MySQL 在默认的 REPEATABLE READ 下，范围当前读会加 next-key lock，记录锁加间隙锁一起上。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "书架上有 10 号、20 号两本书，中间的空位也是资源。间隙锁把「10 到 20 之间」这段空位锁住，别人想插一本 15 号，就得等你事务结束。记录锁管「已有的书」，间隙锁管「书之间还能不能补书」。"
+    },
+    {
+      "heading": "为什么需要它",
+      "text": "没有间隙锁的话：事务 A 查 id 在 10 到 20 之间的订单，读到 3 行；事务 B 此时插入一行 id=15 并提交；A 再查变成 4 行，凭空多出来的就是幻读。间隙锁让「这个范围在我事务结束前不许新增」，从根上堵住幻读。"
+    },
+    {
+      "heading": "next-key lock 怎么算",
+      "text": "InnoDB 的范围加锁单位是 next-key lock，等于「记录本身的锁」加上「到上一条记录之间的间隙锁」。唯一索引等值命中且记录存在时，只加记录锁，不加间隙锁，因为唯一索引不可能插入重复值。非唯一索引等值查询、范围查询、不存在的等值查询，都会带间隙锁。"
+    },
+    {
+      "heading": "它的副作用",
+      "text": "间隙锁之间通常不互斥，两个事务可以同时锁住同一个间隙，但插入意向锁会和间隙锁冲突。这带来两个结果：并发插入容易被阻塞；多个事务对同一段间隙交叉加锁，很容易演变成死锁。INSERT 语句本身也会加插入意向锁，高并发写入时会明显感觉到互相等待。"
+    },
+    {
+      "heading": "怎么减少伤害",
+      "text": "优先用唯一索引等值定位，避免大范围 SELECT ... FOR UPDATE；范围操作尽量拆小、事务尽量短；如果业务不依赖可重复读，可以评估切到 READ COMMITTED，间隙锁基本关闭，但必须同步检查 binlog 格式和业务逻辑。"
+    }
+  ],
+  "keyPoints": [
+    "间隙锁只锁「空位」，不锁已有记录；目的是防幻读。",
+    "next-key lock 等于记录锁加间隙锁，RR 下范围当前读默认加。",
+    "唯一索引等值命中且记录存在时，只加记录锁。",
+    "间隙锁之间不互斥，但会阻塞插入意向锁。",
+    "READ COMMITTED 下间隙锁基本关闭，这是很多公司改 RC 的原因。"
+  ],
+  "snippets": [
+    {
+      "title": "范围当前读会加 next-key lock",
+      "lang": "sql",
+      "code": "START TRANSACTION;\nSELECT * FROM products WHERE id BETWEEN 10 AND 20 FOR UPDATE;\nCOMMIT;"
+    },
+    {
+      "title": "唯一索引等值查询只锁一行",
+      "lang": "sql",
+      "code": "START TRANSACTION;\nSELECT * FROM products WHERE id = 15 FOR UPDATE;\nCOMMIT;"
+    },
+    {
+      "title": "看间隙锁到底锁了哪里",
+      "lang": "sql",
+      "code": "SELECT ENGINE_TRANSACTION_ID, OBJECT_NAME, INDEX_NAME, LOCK_TYPE, LOCK_MODE, LOCK_DATA\nFROM performance_schema.data_locks\nWHERE OBJECT_NAME = 'products';"
+    }
+  ],
+  "pitfalls": [
+    "以为 WHERE id > 10 只锁已经存在的行，其实后面的间隙也被锁了，插入会等。",
+    "用非唯一索引做等值条件，即使只查一行也会加间隙锁，插入新值被阻塞。",
+    "在 RR 下做批量导入时与其他事务交叉，间隙锁互相等待，频繁死锁。",
+    "把间隙锁当成 bug，其实它是 RR 防幻读的代价；要么改索引和 SQL 形态，要么评估换隔离级别。"
+  ],
+  "enterprise": "电商的库存、订单号生成等高频插入场景，RR 的间隙锁是死锁高发区：尽量用主键或唯一键等值更新，把范围操作拆小，控制事务时长。如果业务不依赖可重复读，可评估切到 READ COMMITTED 减少间隙锁，但要同步检查 binlog 格式与依赖可重复读的代码。",
+  "related": ["lock-types", "isolation-levels", "deadlock", "mvcc", "index-failure"]
+}

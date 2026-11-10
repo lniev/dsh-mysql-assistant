@@ -1,0 +1,69 @@
+{
+  "id": "online-ddl",
+  "titleZh": "大表 DDL 与 Online DDL",
+  "title": "Online DDL",
+  "chapter": "ops-security",
+  "difficulty": 3,
+  "minutes": 15,
+  "summary": "给大表加字段或索引，就像给行驶中的汽车换轮胎：做对了车不停，做错了整条路堵死。订单表几千万行时直接 ALTER TABLE 可能锁表几十分钟、把从库延迟拖到几小时，最后连接全超时。Online DDL 就是让这条 ALTER 尽量不阻塞读写。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "改表结构要先拿到「元数据锁」（MDL，可以理解成这张表的使用权）。如果前面有长事务一直占着这张表，ALTER 就得排队，后面的 SELECT 和 UPDATE 也会被堵在后面，整个库像堵车一样卡住。所以大表 DDL 的第一课不是 SQL 语法，是查长事务。"
+    },
+    {
+      "heading": "为什么大表 DDL 危险",
+      "text": "有些变更要「拷贝整表」：建临时表、把数据全搬过去、再改名，数据越多耗时越长，磁盘占用翻倍。期间写入被阻塞，从库还要重放同样的 DDL，延迟直接拉高；如果从库延迟告警触发切主，问题会被放大成一次故障。"
+    },
+    {
+      "heading": "8.0 能做到什么程度",
+      "text": "ALGORITHM=INSTANT 只改元数据，瞬间完成，比如加列、改默认值；INPLACE 不拷贝表、通常不阻塞 DML，比如加二级索引；COPY 必须拷表，最慢。执行时显式写 ALGORITHM 和 LOCK=NONE，做不到时任它会直接报错，而不是偷偷锁表。"
+    },
+    {
+      "heading": "上线流程",
+      "text": "低峰期执行，提前确认没有长事务，先在从库演练并观察延迟。超大表用 gh-ost 或 pt-online-schema-change：先建影子表、分批拷数据、追增量、最后切换，过程中主表读写不受影响，还能随时暂停和回滚。"
+    },
+    {
+      "heading": "DDL 前后看什么",
+      "text": "执行前查 information_schema.INNODB_TRX 找长事务，查 performance_schema.metadata_locks 看有没有 MDL 等待；执行后看复制延迟、慢查询和连接数。加索引前先用 EXPLAIN 确认真的能用上，不是每个新查询都值得加索引。"
+    }
+  ],
+  "keyPoints": [
+    "大表改结构前先查长事务，否则 DDL 会排队并堵住后面的所有请求。",
+    "能用 INSTANT 就用 INSTANT，用不了优先 INPLACE，并显式写 ALGORITHM、LOCK=NONE。",
+    "加二级索引通常走 INPLACE 不锁写，改列类型、改主键基本都要拷贝整表。",
+    "大表上线用 gh-ost 或 pt-osc，分批拷贝，低峰执行并盯从库延迟。",
+    "DDL 前在从库演练，估算耗时和磁盘增量，准备好回滚方式。",
+    "执行后看复制延迟和连接数，异常时立刻停掉。"
+  ],
+  "snippets": [
+    {
+      "title": "加列用 INSTANT，瞬间完成",
+      "lang": "sql",
+      "code": "ALTER TABLE orders\n  ADD COLUMN channel VARCHAR(16) NOT NULL DEFAULT 'app',\n  ALGORITHM = INSTANT;"
+    },
+    {
+      "title": "加索引用 INPLACE 且不锁写",
+      "lang": "sql",
+      "code": "ALTER TABLE orders\n  ADD INDEX idx_user_status_created (user_id, status, created_at),\n  ALGORITHM = INPLACE, LOCK = NONE;"
+    },
+    {
+      "title": "DDL 前查长事务和元数据锁",
+      "lang": "sql",
+      "code": "SELECT trx_id, trx_state, trx_started, trx_mysql_thread_id\nFROM information_schema.INNODB_TRX\nORDER BY trx_started\nLIMIT 10;\nSELECT OBJECT_SCHEMA, OBJECT_NAME, LOCK_TYPE, LOCK_STATUS\nFROM performance_schema.metadata_locks\nWHERE OBJECT_SCHEMA = 'shop'\nLIMIT 20;"
+    }
+  ],
+  "pitfalls": [
+    "在业务高峰直接 ALTER 大表：锁表加上从库延迟，连接池瞬间打满，故障比不改还严重。",
+    "不检查长事务就执行 DDL：MDL 排队会让这张表上的读写全部卡住，几秒钟就能拖垮服务。",
+    "只考虑主库耗时：从库重放 DDL 可能更慢，必须预留延迟窗口，必要时先停从库延迟告警。",
+    "以为写了 INSTANT 就一定是瞬间：有些变更做不到 INSTANT，执行时才报错或退回锁表，上线前要在从库演练确认。"
+  ],
+  "enterprise": "DDL 纳入发布流程：变更单写清 SQL、预计耗时、执行窗口、回滚方式；三千万行以上优先用 gh-ost 或 pt-osc；执行期间盯 Threads_running、复制延迟和慢查询；加索引前用 EXPLAIN 验证收益，别给每个新查询都加索引。",
+  "related": [
+    "index-design",
+    "replication",
+    "monitoring",
+    "backup-restore"
+  ]
+}

@@ -1,0 +1,380 @@
+{
+  "titleZh": "SQL 操练场",
+  "intro": "左侧是电商示例库和练习目录，右侧写 SQL、点运行就能看到真实结果。题目会自动判对错，卡住可以看提示和参考答案。",
+  "database": {
+    "name": "shop",
+    "titleZh": "电商示例库",
+    "description": "7 张表：用户、分类、商品、订单、订单项、支付、库存。练习都基于它，点「重置数据库」可恢复初始数据。"
+  },
+  "stages": [
+    { "id": "basics", "titleZh": "基础查询", "description": "SELECT / WHERE / ORDER BY / LIMIT，先学会把数据查出来。" },
+    { "id": "join", "titleZh": "多表查询", "description": "JOIN、子查询：数据分散在多张表里，要学会拼起来。" },
+    { "id": "aggregate", "titleZh": "聚合与进阶", "description": "GROUP BY、HAVING、窗口函数、CASE WHEN，学会做统计与分析。" },
+    { "id": "dml", "titleZh": "建表与写入", "description": "CREATE TABLE、INSERT、UPDATE、DELETE，把数据管起来。" },
+    { "id": "transaction", "titleZh": "事务与优化", "description": "事务、锁与 EXPLAIN，处理并发和性能问题。" }
+  ],
+  "exercises": [
+    {
+      "id": "b1",
+      "stageId": "basics",
+      "titleZh": "便宜的上架商品",
+      "goal": "练习用 WHERE 组合多个筛选条件，再用 ORDER BY 把结果排好。",
+      "prompt": "查询 products 表，筛出「已上架（on_sale = 1）」并且「价格低于 100 元」的商品，返回 id、name、price 三列，按 price 升序、id 升序排列。",
+      "hint": "两个条件用 AND 连接；ORDER BY 先写 price，再补 id 作为第二排序键，结果顺序就稳定了。",
+      "starterSql": "SELECT\n  -- 在这里写你的查询\nFROM products;",
+      "solutionSql": "SELECT id, name, price\nFROM products\nWHERE on_sale = 1 AND price < 100\nORDER BY price, id;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 1,
+      "minutes": 4,
+      "pageIds": ["select-basics", "where-filter", "order-limit"]
+    },
+    {
+      "id": "b2",
+      "stageId": "basics",
+      "titleZh": "最贵的三个上架商品",
+      "goal": "练习 ORDER BY + LIMIT：先排序，再只取前几行。",
+      "prompt": "查询 products 表，只保留已上架商品，返回 name、price 两列，按 price 从高到低排序，只返回前 3 行。",
+      "hint": "ORDER BY price DESC 负责从高到低，LIMIT 3 负责只取前三行。",
+      "starterSql": "SELECT\n  -- 在这里写你的查询\nFROM products;",
+      "solutionSql": "SELECT name, price\nFROM products\nWHERE on_sale = 1\nORDER BY price DESC\nLIMIT 3;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 1,
+      "minutes": 4,
+      "pageIds": ["order-limit", "select-basics"]
+    },
+    {
+      "id": "b3",
+      "stageId": "basics",
+      "titleZh": "哪些用户下过单",
+      "goal": "练习 DISTINCT：一个用户有多条订单时，只保留他的一次 user_id。",
+      "prompt": "orders 表里同一个用户可能有多条订单。请返回所有「下过单」的 user_id，每个用户只出现一次，按 user_id 升序排列。",
+      "hint": "DISTINCT 是作用在整行结果上的关键字：SELECT DISTINCT user_id。",
+      "starterSql": "SELECT\n  -- 在这里写你的查询\nFROM orders;",
+      "solutionSql": "SELECT DISTINCT user_id\nFROM orders\nORDER BY user_id;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 1,
+      "minutes": 4,
+      "pageIds": ["distinct", "select-basics"]
+    },
+    {
+      "id": "b4",
+      "stageId": "basics",
+      "titleZh": "找不到城市的用户",
+      "goal": "搞清 NULL 和空字符串的区别，学会用 IS NULL 判断「没有值」。",
+      "prompt": "查询 users 表，返回 city 为 NULL 的用户的 id 和 name 两列，按 id 升序排列。注意 city 为 NULL 时不能用 = NULL 判断。",
+      "hint": "判断空值要用 IS NULL 而不是 = NULL；= NULL 永远匹配不到任何行。",
+      "starterSql": "SELECT id, name\nFROM users\nWHERE -- 在这里写你的查询\n;",
+      "solutionSql": "SELECT id, name\nFROM users\nWHERE city IS NULL\nORDER BY id;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 2,
+      "minutes": 4,
+      "pageIds": ["null-handling", "where-filter"]
+    },
+    {
+      "id": "b5",
+      "stageId": "basics",
+      "titleZh": "算一算八折价",
+      "goal": "练习计算列与别名：查询结果可以直接做算术，再用 ROUND 控制小数位。",
+      "prompt": "查询已上架且价格不低于 500 元的商品，返回 name、price 和「八折价」三列。八折价用 price * 0.8 计算，并用 ROUND(..., 2) 保留两位小数；结果按 price 从高到低排序。",
+      "hint": "计算列可以写成 ROUND(price * 0.8, 2) AS sale_price，然后和其他列一起放进 SELECT。",
+      "starterSql": "SELECT\n  name,\n  price\n  -- 在这里写你的查询\nFROM products;",
+      "solutionSql": "SELECT name, price, ROUND(price * 0.8, 2) AS sale_price\nFROM products\nWHERE on_sale = 1 AND price >= 500\nORDER BY price DESC;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 2,
+      "minutes": 5,
+      "pageIds": ["expressions-aliases", "select-basics", "where-filter"]
+    },
+    {
+      "id": "b6",
+      "stageId": "basics",
+      "titleZh": "订单整体概况",
+      "goal": "第一次用聚合函数：从多行数据算出一个汇总值，结果只有一行。",
+      "prompt": "对 orders 表做一次整体统计，返回一行两列：订单总数（所有状态都算）和订单总金额（所有状态都算），总金额用 ROUND(SUM(total_amount), 2) 保留两位小数。",
+      "hint": "COUNT(*) 数行数，SUM(total_amount) 累加金额；聚合函数没有 GROUP BY 时会把整张表压成一行。",
+      "starterSql": "SELECT\n  -- 在这里写你的查询\nFROM orders;",
+      "solutionSql": "SELECT COUNT(*) AS order_count, ROUND(SUM(total_amount), 2) AS total_amount\nFROM orders;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 1,
+      "minutes": 4,
+      "pageIds": ["aggregate-functions", "select-basics"]
+    },
+
+    {
+      "id": "j1",
+      "stageId": "join",
+      "titleZh": "已支付订单的商品明细",
+      "goal": "练习 INNER JOIN 连三张表：订单 → 订单项 → 商品，把散落的数据拼成一张明细表。",
+      "prompt": "把 orders、order_items、products 三张表连接起来，筛出状态为 paid 的订单，返回 order_id、product_name、quantity、unit_price 四列，按 order_id 升序、product_name 升序排列。",
+      "hint": "从 orders 出发：JOIN order_items ON oi.order_id = o.id，再 JOIN products ON p.id = oi.product_id；筛选条件写在 WHERE 里。",
+      "starterSql": "SELECT\n  -- 在这里写你的查询\nFROM orders o\nJOIN order_items oi ON oi.order_id = o.id;",
+      "solutionSql": "SELECT o.id AS order_id, p.name AS product_name, oi.quantity, oi.unit_price\nFROM orders o\nJOIN order_items oi ON oi.order_id = o.id\nJOIN products p ON p.id = oi.product_id\nWHERE o.status = 'paid'\nORDER BY o.id, p.name;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 2,
+      "minutes": 8,
+      "pageIds": ["join-inner", "select-basics", "where-filter"]
+    },
+    {
+      "id": "j2",
+      "stageId": "join",
+      "titleZh": "找出沉默用户",
+      "goal": "练习 LEFT JOIN：保留左表全部行，右表匹配不上时就是「没有订单」的用户。",
+      "prompt": "找出「从没下过任何订单」的用户，返回 id、name 两列，按 id 升序排列。请用 LEFT JOIN 实现，不要用 NOT IN。",
+      "hint": "users LEFT JOIN orders ON o.user_id = o.id，再在 WHERE 里用 o.id IS NULL 筛出右表没匹配上的行。",
+      "starterSql": "SELECT u.id, u.name\nFROM users u\n-- 在这里写你的查询\n;",
+      "solutionSql": "SELECT u.id, u.name\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE o.id IS NULL\nORDER BY u.id;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 2,
+      "minutes": 7,
+      "pageIds": ["join-outer", "select-basics"]
+    },
+    {
+      "id": "j3",
+      "stageId": "join",
+      "titleZh": "上架却没人买过的商品",
+      "goal": "再用一次 LEFT JOIN 找「没有销量」的商品，注意筛选条件放 WHERE 和放 ON 的区别。",
+      "prompt": "找出「已上架但从未出现在任何订单明细里」的商品，返回 id、name 两列，按 id 升序排列。下架商品不算。",
+      "hint": "products LEFT JOIN order_items ON oi.product_id = p.id，再要求 oi.id IS NULL 并且 p.on_sale = 1。",
+      "starterSql": "SELECT p.id, p.name\nFROM products p\n-- 在这里写你的查询\n;",
+      "solutionSql": "SELECT p.id, p.name\nFROM products p\nLEFT JOIN order_items oi ON oi.product_id = p.id\nWHERE p.on_sale = 1 AND oi.id IS NULL\nORDER BY p.id;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 2,
+      "minutes": 7,
+      "pageIds": ["join-outer", "where-filter"]
+    },
+    {
+      "id": "j4",
+      "stageId": "join",
+      "titleZh": "每个一级分类卖了多少",
+      "goal": "把自连接和多表聚合合起来用：先把二级分类归到一级分类，再汇总已支付订单的销售额。",
+      "prompt": "只统计状态为 paid 的订单，计算每个「一级分类」的销售额（quantity * unit_price 求和）。二级分类要归到它所属的一级分类；一级分类自己的 parent_id 为 0。销售额用 ROUND(..., 2) 保留两位小数。返回一级分类名称和销售额两列，按销售额从高到低排序，销售额相同时按分类名称升序。",
+      "hint": "categories 自连接：LEFT JOIN categories parent ON parent.id = c.parent_id。一级分类匹配不到父分类，parent 相关列为 NULL，用 COALESCE(parent.name, c.name) 取「一级分类名」。",
+      "starterSql": "SELECT\n  -- 在这里写你的查询\nFROM categories c\nJOIN products p ON p.category_id = c.id\nJOIN order_items oi ON oi.product_id = p.id\nJOIN orders o ON o.id = oi.order_id;",
+      "solutionSql": "SELECT COALESCE(parent.name, c.name) AS category_name,\n       ROUND(SUM(oi.quantity * oi.unit_price), 2) AS sales_amount\nFROM categories c\nJOIN products p ON p.category_id = c.id\nJOIN order_items oi ON oi.product_id = p.id\nJOIN orders o ON o.id = oi.order_id\nLEFT JOIN categories parent ON parent.id = c.parent_id\nWHERE o.status = 'paid'\nGROUP BY COALESCE(parent.name, c.name)\nORDER BY sales_amount DESC, category_name;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 3,
+      "minutes": 12,
+      "pageIds": ["join-outer", "group-by", "aggregate-functions"]
+    },
+    {
+      "id": "j5",
+      "stageId": "join",
+      "titleZh": "比平均价更贵的商品",
+      "goal": "练习子查询：把「算平均价」和「筛商品」拆成内外两层，先算出一个值，再拿它当条件。",
+      "prompt": "查询所有已上架商品中「价格高于已上架商品平均价」的商品，返回 name、price 两列，按 price 从高到低排序。平均价必须用子查询算出来，不要手写一个数字。",
+      "hint": "内层子查询：SELECT AVG(price) FROM products WHERE on_sale = 1；外层用 price > (子查询) 做筛选。",
+      "starterSql": "SELECT name, price\nFROM products\nWHERE on_sale = 1\n  AND -- 在这里写你的查询\n;",
+      "solutionSql": "SELECT name, price\nFROM products\nWHERE on_sale = 1\n  AND price > (SELECT AVG(price) FROM products WHERE on_sale = 1)\nORDER BY price DESC;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 3,
+      "minutes": 8,
+      "pageIds": ["subquery", "aggregate-functions", "where-filter"]
+    },
+
+    {
+      "id": "a1",
+      "stageId": "aggregate",
+      "titleZh": "找出复购用户",
+      "goal": "练习 GROUP BY + HAVING：先按用户分组数订单，再对分组结果做筛选。",
+      "prompt": "统计每个用户的已支付订单数，只保留已支付订单数大于等于 2 的用户（也就是复购用户），返回 user_id 和订单数两列，按 user_id 升序排列。",
+      "hint": "WHERE status = 'paid' 先筛订单，GROUP BY user_id 分组，HAVING COUNT(*) >= 2 再筛分组；HAVING 不能用 WHERE 代替。",
+      "starterSql": "SELECT\n  -- 在这里写你的查询\nFROM orders\nWHERE status = 'paid'\nGROUP BY user_id;",
+      "solutionSql": "SELECT user_id, COUNT(*) AS paid_order_count\nFROM orders\nWHERE status = 'paid'\nGROUP BY user_id\nHAVING COUNT(*) >= 2\nORDER BY user_id;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 2,
+      "minutes": 8,
+      "pageIds": ["group-by", "having", "aggregate-functions"]
+    },
+    {
+      "id": "a2",
+      "stageId": "aggregate",
+      "titleZh": "每人买过几种商品",
+      "goal": "练习 COUNT(DISTINCT)：同一件商品买多次只算 1 种，和 COUNT(*) 的差别要能说清。",
+      "prompt": "统计每个用户在已支付订单里买过多少种不同的商品（同一商品买多次只算 1 种），返回 user_id 和商品种类数两列，按商品种类数从高到低排序，种类数相同时按 user_id 升序。",
+      "hint": "先把 orders 和 order_items 连起来，再 COUNT(DISTINCT oi.product_id)；如果写成 COUNT(*) 会把同一商品的多行也数进去。",
+      "starterSql": "SELECT\n  o.user_id\n  -- 在这里写你的查询\nFROM orders o\nJOIN order_items oi ON oi.order_id = o.id\nWHERE o.status = 'paid'\nGROUP BY o.user_id;",
+      "solutionSql": "SELECT o.user_id, COUNT(DISTINCT oi.product_id) AS product_kind_count\nFROM orders o\nJOIN order_items oi ON oi.order_id = o.id\nWHERE o.status = 'paid'\nGROUP BY o.user_id\nORDER BY product_kind_count DESC, o.user_id;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 3,
+      "minutes": 8,
+      "pageIds": ["aggregate-functions", "group-by", "distinct"]
+    },
+    {
+      "id": "a3",
+      "stageId": "aggregate",
+      "titleZh": "订单金额分档统计",
+      "goal": "练习 CASE WHEN 生成分档字段，再按这个分档字段做 GROUP BY。",
+      "prompt": "把订单按金额分成三档：total_amount >= 1000 记为「大额」；300 <= total_amount < 1000 记为「中额」；其余记为「小额」。统计每档的订单数（所有状态都算），返回档位和订单数两列，按订单数从高到低排序。",
+      "hint": "CASE WHEN total_amount >= 1000 THEN '大额' WHEN total_amount >= 300 THEN '中额' ELSE '小额' END 作为一个新列，然后 GROUP BY 这个表达式或它的别名。",
+      "starterSql": "SELECT\n  -- 在这里写你的查询\nFROM orders\nGROUP BY 1;",
+      "solutionSql": "SELECT CASE\n         WHEN total_amount >= 1000 THEN '大额'\n         WHEN total_amount >= 300 THEN '中额'\n         ELSE '小额'\n       END AS amount_level,\n       COUNT(*) AS order_count\nFROM orders\nGROUP BY amount_level\nORDER BY order_count DESC;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 3,
+      "minutes": 8,
+      "pageIds": ["expressions-aliases", "group-by", "aggregate-functions"]
+    },
+    {
+      "id": "a4",
+      "stageId": "aggregate",
+      "titleZh": "按月看已支付订单",
+      "goal": "练习日期函数配合 GROUP BY：把 DATETIME 截成「年月」再按它分组统计。",
+      "prompt": "按订单创建时间统计每个月的已支付订单，返回月份、已支付订单数和已支付金额三列。月份用 DATE_FORMAT(created_at, '%Y-%m') 格式化为类似 2026-08 的字符串；金额用 ROUND(SUM(total_amount), 2) 保留两位小数；按月份升序排列。",
+      "hint": "在 SELECT 和 GROUP BY 里都写 DATE_FORMAT(created_at, '%Y-%m')，WHERE status = 'paid' 要先放在分组之前。",
+      "starterSql": "SELECT\n  -- 在这里写你的查询\nFROM orders\nWHERE status = 'paid'\nGROUP BY 1;",
+      "solutionSql": "SELECT DATE_FORMAT(created_at, '%Y-%m') AS month,\n       COUNT(*) AS paid_orders,\n       ROUND(SUM(total_amount), 2) AS paid_amount\nFROM orders\nWHERE status = 'paid'\nGROUP BY DATE_FORMAT(created_at, '%Y-%m')\nORDER BY month;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 3,
+      "minutes": 8,
+      "pageIds": ["group-by", "expressions-aliases", "time-types"]
+    },
+    {
+      "id": "a5",
+      "stageId": "aggregate",
+      "titleZh": "消费额排名",
+      "goal": "练习窗口函数 RANK()：在保留每一行明细的同时，算出它在全体中的名次。",
+      "prompt": "统计每个用户的已支付消费总额，并给消费额排名（用窗口函数 RANK()）。返回 user_id、user_name、total_spent、rank_no 四列，total_spent 用 ROUND(..., 2) 保留两位小数，按 rank_no 升序排列，名次相同时按 user_id 升序。",
+      "hint": "先 JOIN users 取名字并 GROUP BY 聚合金额，再在 SELECT 里加 RANK() OVER (ORDER BY SUM(o.total_amount) DESC) AS rank_no。",
+      "starterSql": "SELECT\n  u.id AS user_id,\n  u.name AS user_name\n  -- 在这里写你的查询\nFROM users u\nJOIN orders o ON o.user_id = u.id\nWHERE o.status = 'paid'\nGROUP BY u.id, u.name;",
+      "solutionSql": "SELECT u.id AS user_id,\n       u.name AS user_name,\n       ROUND(SUM(o.total_amount), 2) AS total_spent,\n       RANK() OVER (ORDER BY SUM(o.total_amount) DESC) AS rank_no\nFROM users u\nJOIN orders o ON o.user_id = u.id\nWHERE o.status = 'paid'\nGROUP BY u.id, u.name\nORDER BY rank_no, u.id;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 4,
+      "minutes": 10,
+      "pageIds": ["report-queries", "group-by", "aggregate-functions"]
+    },
+
+    {
+      "id": "d1",
+      "stageId": "dml",
+      "titleZh": "建一张商品评价表",
+      "goal": "把业务需求翻译成 CREATE TABLE：选对类型、主键和默认值。",
+      "prompt": "新建一张商品评价表 product_reviews，包含这些列（列名必须一致，顺序不限）：id（自增整数主键）、product_id（整数，非空）、rating（TINYINT，非空）、comment（TEXT，可为空）、created_at（DATETIME，默认 CURRENT_TIMESTAMP）。不要加 COMMENT、外键和表级索引。",
+      "hint": "id 用 INT NOT NULL AUTO_INCREMENT PRIMARY KEY；created_at 用 DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP。",
+      "starterSql": "-- 在这里写你的查询：创建 product_reviews 表\nCREATE TABLE product_reviews (\n  \n);",
+      "solutionSql": "CREATE TABLE product_reviews (\n  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,\n  product_id INT NOT NULL,\n  rating TINYINT NOT NULL,\n  comment TEXT,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;",
+      "check": {
+        "mode": "schema",
+        "table": "product_reviews",
+        "columns": ["id", "product_id", "rating", "comment", "created_at"]
+      },
+      "difficulty": 2,
+      "minutes": 8,
+      "pageIds": ["create-table", "data-types", "primary-key"]
+    },
+    {
+      "id": "d2",
+      "stageId": "dml",
+      "titleZh": "一次插入两个用户",
+      "goal": "练习多行 INSERT：一条语句插入多组 VALUES，主键和创建时间交给数据库默认值。",
+      "prompt": "用一条 INSERT 语句向 users 表插入两名新用户：第一个 name 为 '王小明'、phone 为 '13900000011'、city 为 '重庆'；第二个 name 为 '李小红'、phone 为 '13900000012'、city 为 '苏州'。id 和 created_at 让数据库自动处理。",
+      "hint": "INSERT INTO users (name, phone, city) VALUES (...), (...); 一个 VALUES 后面跟多组括号，用逗号分隔。",
+      "starterSql": "INSERT INTO users (name, phone, city)\nVALUES\n  -- 在这里写你的查询\n;",
+      "solutionSql": "INSERT INTO users (name, phone, city) VALUES\n  ('王小明', '13900000011', '重庆'),\n  ('李小红', '13900000012', '苏州');",
+      "check": {
+        "mode": "verify",
+        "verifySql": "SELECT name, phone, city\nFROM users\nWHERE phone IN ('13900000011', '13900000012')\nORDER BY phone;"
+      },
+      "difficulty": 2,
+      "minutes": 6,
+      "pageIds": ["insert", "unique-check-default"]
+    },
+    {
+      "id": "d3",
+      "stageId": "dml",
+      "titleZh": "机械键盘降价 10%",
+      "goal": "练习 UPDATE：先写准 WHERE 再改值，金额用 ROUND 控制小数位，避免误伤其他商品。",
+      "prompt": "用一条 UPDATE 把名称为「机械键盘」的商品价格下调 10%（即 price * 0.9），结果保留两位小数，其他商品不要动。",
+      "hint": "SET price = ROUND(price * 0.9, 2)，WHERE 用 name = '机械键盘' 精确锁定这一行；改完可以 SELECT 一下核对。",
+      "starterSql": "UPDATE products\nSET -- 在这里写你的查询\nWHERE name = '机械键盘';",
+      "solutionSql": "UPDATE products\nSET price = ROUND(price * 0.9, 2)\nWHERE name = '机械键盘';",
+      "check": {
+        "mode": "verify",
+        "verifySql": "SELECT name, price\nFROM products\nWHERE name = '机械键盘';"
+      },
+      "difficulty": 2,
+      "minutes": 6,
+      "pageIds": ["update", "decimal-money"]
+    },
+    {
+      "id": "d4",
+      "stageId": "dml",
+      "titleZh": "清理小额取消订单",
+      "goal": "练习 DELETE：用多个 WHERE 条件精确圈定要删的行，删完确认「该留的还在」。",
+      "prompt": "删除所有「已取消（status = 'cancelled'）」并且订单金额小于 1000 元的订单，其他订单不要动。写完后可以查询剩下的 cancelled 订单核对。",
+      "hint": "DELETE FROM orders WHERE status = 'cancelled' AND total_amount < 1000；先 SELECT 同样的条件看要删哪些行，再改成 DELETE 更安全。",
+      "starterSql": "DELETE FROM orders\nWHERE -- 在这里写你的查询\n;",
+      "solutionSql": "DELETE FROM orders\nWHERE status = 'cancelled' AND total_amount < 1000;",
+      "check": {
+        "mode": "verify",
+        "verifySql": "SELECT id, total_amount\nFROM orders\nWHERE status = 'cancelled'\nORDER BY id;"
+      },
+      "difficulty": 2,
+      "minutes": 6,
+      "pageIds": ["delete", "where-filter"]
+    },
+
+    {
+      "id": "t1",
+      "stageId": "transaction",
+      "titleZh": "扣库存失败就回滚",
+      "goal": "练习事务原子性：多条写操作要么都成功，要么一起回滚，数据库不能停在中间状态。",
+      "prompt": "写一个事务：先向 orders 表插入一条新订单（user_id = 1，status = 'pending'，total_amount = 99.00），再把 products 表里 id = 1 的库存减 1，最后回滚整个事务。要求用 START TRANSACTION ... ROLLBACK，结束后数据库不能有任何变化。",
+      "hint": "START TRANSACTION; 之后的 INSERT 和 UPDATE 都在同一个事务里，最后写 ROLLBACK; 主动撤销，等于什么都没做。",
+      "starterSql": "START TRANSACTION;\n\n-- 在这里写你的查询\n\nROLLBACK;",
+      "solutionSql": "START TRANSACTION;\nINSERT INTO orders (user_id, status, total_amount) VALUES (1, 'pending', 99.00);\nUPDATE products SET stock = stock - 1 WHERE id = 1;\nROLLBACK;",
+      "check": {
+        "mode": "verify",
+        "verifySql": "SELECT (SELECT COUNT(*) FROM orders) AS order_count,\n       (SELECT stock FROM products WHERE id = 1) AS product1_stock;"
+      },
+      "difficulty": 3,
+      "minutes": 10,
+      "pageIds": ["acid", "transaction-pitfalls", "undo-redo-log"]
+    },
+    {
+      "id": "t2",
+      "stageId": "transaction",
+      "titleZh": "并发扣库存不超卖",
+      "goal": "练习条件更新：把「够不够扣」的判断写进 UPDATE 的 WHERE，用一条语句原子完成检查和扣减。",
+      "prompt": "商品 id = 8 当前库存是 8 件，现在要卖 3 件。请用一条 UPDATE 把库存扣掉 3 件，并且必须在 WHERE 里带上「库存足够（stock >= 3）」的条件，保证并发下不会把库存扣成负数。只改 products 表的 stock 字段。",
+      "hint": "UPDATE products SET stock = stock - 3 WHERE id = 8 AND stock >= 3；条件不满足时这条 UPDATE 影响 0 行，库存保持原样。",
+      "starterSql": "UPDATE products\nSET stock = stock - 3\nWHERE -- 在这里写你的查询\n;",
+      "solutionSql": "UPDATE products\nSET stock = stock - 3\nWHERE id = 8 AND stock >= 3;",
+      "check": {
+        "mode": "verify",
+        "verifySql": "SELECT id, stock\nFROM products\nWHERE id = 8;"
+      },
+      "difficulty": 3,
+      "minutes": 8,
+      "pageIds": ["inventory-oversell", "update", "lock-types"]
+    },
+    {
+      "id": "t3",
+      "stageId": "transaction",
+      "titleZh": "旧值校验的乐观锁",
+      "goal": "练习乐观锁：用「读到的旧库存」做更新条件，库存被别人改过就放弃本次扣减。",
+      "prompt": "用「旧值校验」模拟乐观锁：刚才读到商品 id = 6 的库存是 15 件，现在要扣 2 件。请写一条 UPDATE，扣减库存的同时在 WHERE 里校验「当前库存仍然等于 15」；如果库存已经被别人改过，这条语句就不应该生效。只改 products 表的 stock 字段。",
+      "hint": "UPDATE products SET stock = stock - 2 WHERE id = 6 AND stock = 15；把读到的旧值写进 WHERE，就是最朴素的乐观锁。",
+      "starterSql": "UPDATE products\nSET stock = stock - 2\nWHERE -- 在这里写你的查询\n;",
+      "solutionSql": "UPDATE products\nSET stock = stock - 2\nWHERE id = 6 AND stock = 15;",
+      "check": {
+        "mode": "verify",
+        "verifySql": "SELECT stock\nFROM products\nWHERE id = 6;"
+      },
+      "difficulty": 3,
+      "minutes": 8,
+      "pageIds": ["optimistic-pessimistic", "update", "lock-types"]
+    },
+    {
+      "id": "t4",
+      "stageId": "transaction",
+      "titleZh": "低库存预警与 EXPLAIN",
+      "goal": "学会用 EXPLAIN 判断查询有没有走索引，并写出条件准确、顺序稳定的预警查询。",
+      "prompt": "库存预警：查出「已上架且库存低于 30」的商品，返回 id、name、stock 三列，按 stock 升序、id 升序排列。最后提交的必须是这条普通 SELECT（不要提交 EXPLAIN 语句）；写之前可以先在同一条 SQL 前面加 EXPLAIN 观察执行计划。",
+      "hint": "先用 EXPLAIN 看 type 列：products 上没有索引时通常是 ALL（全表扫描）。正式查询用 WHERE on_sale = 1 AND stock < 30，别忘了 ORDER BY stock, id。",
+      "starterSql": "-- 先写 EXPLAIN SELECT ... 看执行计划，再改成正式查询\nSELECT\n  -- 在这里写你的查询\nFROM products\nWHERE on_sale = 1;",
+      "solutionSql": "SELECT id, name, stock\nFROM products\nWHERE on_sale = 1 AND stock < 30\nORDER BY stock, id;",
+      "check": { "mode": "result", "orderSensitive": true },
+      "difficulty": 3,
+      "minutes": 10,
+      "pageIds": ["explain", "index-concept", "slow-query-log"]
+    }
+  ]
+}

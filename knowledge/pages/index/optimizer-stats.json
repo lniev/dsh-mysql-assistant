@@ -1,0 +1,54 @@
+{
+  "id": "optimizer-stats",
+  "titleZh": "优化器与统计信息",
+  "title": "Optimizer & statistics",
+  "chapter": "index",
+  "difficulty": 3,
+  "minutes": 10,
+  "summary": "优化器是数据库的导航软件：它手里有一张「路况地图」（统计信息），估算每条执行路径要读多少行、花多少代价，然后选最便宜的那条。地图不准（统计过期、数据倾斜），导航就会带你绕远路——明明有索引却全表扫描，往往就是优化器估错了代价。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "同一条 SQL 可能有多种执行方式：走不走走索引、用哪个索引、先关联哪张表。优化器不做真实执行，它靠统计信息估算每种方式的代价（主要是要读多少数据页），挑估算代价最小的。所以「选了哪个索引」不是固定的，会随数据分布变化。"
+    },
+    {
+      "heading": "统计信息从哪来",
+      "text": "InnoDB 会维护每张表的总行数，以及每个索引的基数（cardinality，不同值的个数）。8.0 默认会随机采样部分页面来估算，并持久化到 mysql.innodb_index_stats 和 innodb_table_stats。数据变化很大后统计会过时，需要执行 ANALYZE TABLE 触发重新采样。"
+    },
+    {
+      "heading": "为什么优化器会选错",
+      "text": "常见原因：统计过期（大批量导入后没 ANALYZE）、数据倾斜（某个 status 占了 90% 的行）、索引选择性和实际不符、以及优化器对回表代价的估算偏差。极端情况下可以用 FORCE INDEX 指定索引，但它是临时手段，数据分布一变可能更慢，先修统计和索引。"
+    },
+    {
+      "heading": "优化器不是永远的背锅侠",
+      "text": "很多「优化器选错索引」的案子，最后发现是 SQL 写法让索引根本用不上，或者查询返回了太多列导致回表代价巨大。先用 EXPLAIN 确认 possible_keys 里有没有候选，再对比强制走索引后的真实耗时，别一上来就加 hint。"
+    }
+  ],
+  "keyPoints": [
+    "优化器基于统计信息估算代价选执行计划，不实际执行。",
+    "基数（cardinality）反映索引不同值的数量，是选索引的关键依据。",
+    "统计信息会过时，大批量写入后要 ANALYZE TABLE 更新。",
+    "数据倾斜、统计过期会导致选错索引，表现为明明有索引却全表扫。",
+    "FORCE INDEX 是临时手段，优先修统计、改 SQL、调索引。"
+  ],
+  "snippets": [
+    {
+      "title": "查看与更新统计信息",
+      "lang": "sql",
+      "code": "ANALYZE TABLE orders;\n\nSHOW INDEX FROM orders;\n\nSELECT table_name, index_name, stat_name, stat_value\nFROM mysql.innodb_index_stats\nWHERE database_name = DATABASE() AND table_name = 'orders';"
+    },
+    {
+      "title": "对比优化器选择与强制索引",
+      "lang": "sql",
+      "code": "EXPLAIN SELECT id, total_amount FROM orders WHERE status = 'paid' LIMIT 10;\n\nEXPLAIN SELECT id, total_amount FROM orders FORCE INDEX (idx_status) WHERE status = 'paid' LIMIT 10;"
+    }
+  ],
+  "pitfalls": [
+    "批量导入百万行后不 ANALYZE：统计还停留在导入前，优化器按老数据选计划，越跑越慢。",
+    "看到 cardinality 很低就删索引：统计是采样估算，在小表或数据倾斜时偏差很大，要结合实际查询判断。",
+    "把 FORCE INDEX 写进代码长期运行：数据分布一变，强制索引反而变成新的性能问题。",
+    "以为 ANALYZE TABLE 会锁表很久：InnoDB 下它只采样部分页面，但高并发时也会消耗 IO，建议低峰执行。"
+  ],
+  "enterprise": "企业里会把 ANALYZE TABLE 纳入例行运维（大表按月、批量导入后立即执行），并监控慢查询里「key 与 expected 不一致」的语句。对数据倾斜严重的表，会让业务列改造成更均匀的联合索引，而不是依赖 hint 硬顶。",
+  "related": ["explain", "slow-query-log", "index-design", "btree-index", "index-failure"]
+}

@@ -1,0 +1,63 @@
+{
+  "id": "what-is-mysql",
+  "titleZh": "MySQL 是什么",
+  "title": "What is MySQL",
+  "chapter": "start",
+  "difficulty": 1,
+  "minutes": 10,
+  "summary": "MySQL 可以想成一个超级能干的 Excel 仓库：数据按「库 → 表 → 行 → 列」码放，你用 SQL 这门「点单语言」告诉它要什么，它负责存取、扛并发、断电不丢数据。电商网站的用户、商品、订单，绝大多数都住在这样的库里。",
+  "sections": [
+    {
+      "heading": "先把它想成一个 Excel 仓库",
+      "text": "一个 MySQL 服务里可以建很多数据库（database），像一个个 Excel 文件；每个库里有很多表（table），每张表就是一张工作表：一行是一条记录，一列是一个字段。比如 orders 表的每一行是一笔订单，列就是 id、user_id、status、total_amount 这些。表与表之间靠业务字段关联，orders.user_id 指向 users.id。"
+    },
+    {
+      "heading": "它和 Excel 到底差在哪",
+      "text": "第一是并发：Excel 一个人改，MySQL 成千上万个客户端同时读写；第二是约束：列有类型、主键唯一、外键校验，脏数据不容易进；第三是持久化：断电重启数据还在；第四是访问方式：Excel 靠鼠标，MySQL 靠 SQL 语句和程序（Java 的 JDBC、Python 的驱动）。"
+    },
+    {
+      "heading": "SQL 是什么角色",
+      "text": "SQL 是「指挥语言」，不是编程语言。你连上 MySQL 服务器，发一句 SELECT ... FROM orders WHERE status = 'paid'，服务器解析、优化、执行，把结果集还给你。所以 MySQL 是客户端/服务器结构：命令行、Navicat、你的程序都只是客户端，真正干活的是 mysqld 这个服务进程。"
+    },
+    {
+      "heading": "为什么大家先学 MySQL",
+      "text": "它免费开源、装机量大、资料多，后端岗位和面试基本默认你会。把表、索引、事务这三样吃透，再去看 PostgreSQL、Oracle，概念是通的，差别在语法和特性。新手先把增删改查练熟，再补索引与事务，够用很久。"
+    }
+  ],
+  "keyPoints": [
+    "MySQL 是关系型数据库：数据存在表里，表由行（记录）和列（字段）组成。",
+    "层级是 库（database）→ 表（table）→ 行（row）→ 列（column），建东西先建库再建表。",
+    "表像 Excel 工作表：一行是一条记录，一列是一个字段。",
+    "MySQL 是客户端/服务器结构，真正干活的是 mysqld 进程，命令行只是客户端。",
+    "SQL 是操作数据库的语言，你的程序通过驱动把 SQL 发给 MySQL。"
+  ],
+  "snippets": [
+    {
+      "title": "看一眼版本和当前用的库",
+      "lang": "sql",
+      "code": "SELECT VERSION() AS mysql_version, DATABASE() AS current_db;"
+    },
+    {
+      "title": "这台服务器上有哪些库",
+      "lang": "sql",
+      "code": "SHOW DATABASES;"
+    },
+    {
+      "title": "像点单一样查几条数据",
+      "lang": "sql",
+      "code": "SELECT id, name, price, stock\nFROM products\nWHERE on_sale = 1\nORDER BY price DESC\nLIMIT 5;"
+    }
+  ],
+  "pitfalls": [
+    "把 MySQL 当成一个文件：它其实是服务进程加数据目录，命令行窗口只是连上去的客户端。",
+    "以为 SQL 里什么都区分大小写：关键字和表名一般不区分，但字符串值 'Paid' 和 'paid' 是区分的。",
+    "混用「库」和「表」：CREATE DATABASE 是建库，CREATE TABLE 是建表，二者不能互相替代。"
+  ],
+  "enterprise": "企业里的 MySQL 通常不是单机：主从复制做备份与读扩展，定期全量加增量备份防误删，账号按应用拆分到最小权限。写代码时把连接串、超时、重试放进配置；线上订正数据一律先 SELECT 验证再 UPDATE，并留审计记录。",
+  "related": [
+    "first-database",
+    "select-basics",
+    "architecture",
+    "storage-engines"
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "id": "report-queries",
+  "titleZh": "报表统计与窗口函数",
+  "title": "Reporting queries",
+  "chapter": "enterprise",
+  "difficulty": 3,
+  "minutes": 18,
+  "summary": "报表统计就是替业务回答「上个月卖了多少、哪个品类最火、谁是大客户」。只会 GROUP BY 的话，很多问题很难写：比如「每个品类销售额前三的商品」「今天比昨天涨了多少」。窗口函数就是为这类问题生的——它在每一行旁边算一个汇总值，而不像 GROUP BY 那样把行折叠掉。",
+  "sections": [
+    {
+      "heading": "先解释窗口函数",
+      "text": "普通 GROUP BY 像按小组交作业，每组只交一份；窗口函数像老师在每个学生旁边写「你这次排第几、你们组平均分多少」，每个学生（行）都还在。写法是函数() OVER (PARTITION BY 分组字段 ORDER BY 排序字段)，PARTITION BY 不写就是整张表一个窗口。"
+    },
+    {
+      "heading": "报表常见三类问题",
+      "text": "排名和 Top N 用 ROW_NUMBER()；同比环比用 LAG() / LEAD() 拿上一行、下一行；累计值用 SUM() OVER (ORDER BY 日期)。这三类基本覆盖运营 80% 的取数需求，比自连接和临时表简单得多，也更好读。"
+    },
+    {
+      "heading": "为什么报表要单独处理",
+      "text": "报表 SQL 一般扫数据多、耗时长，直接打主库会和下单抢资源。常规做法是读从库、跑在离线库或数仓，或者用定时任务把结果预聚合到报表表里。报表数量上来以后，单独一套只读实例是很划算的投资。"
+    },
+    {
+      "heading": "写报表 SQL 的纪律",
+      "text": "必须带时间范围，别扫全表；先过滤再聚合；GROUP BY 的字段和 SELECT 的非聚合字段保持一致；大表分页别用大 OFFSET，用「上一页最后一条 id」翻页。慢查询阈值以下不代表没影响，扫几百万行的报表照样能把 Buffer Pool 冲掉。"
+    },
+    {
+      "heading": "口径统一",
+      "text": "「GMV」到底含不含退款、算不算运费，要在指标字典里写清楚；同一个指标在多处出现时用同一个视图或同一段 SQL。两个报表算出两个数，业务就不信数据了。改口径要同时改文档和所有引用方。"
+    }
+  ],
+  "keyPoints": [
+    "窗口函数等于「不折叠行的 GROUP BY」，适合排名、环比、累计。",
+    "ROW_NUMBER 取 Top N 要在外层再过滤 rn <= 3，不能直接写在 WHERE 里。",
+    "同比环比用 LAG/LEAD 取前后行，比自连接简单。",
+    "报表查询走从库或离线库，别打主库。",
+    "报表 SQL 必须带时间范围，按时间字段走索引，别对列套函数。",
+    "指标口径要统一，GMV 之类的定义写进指标字典。"
+  ],
+  "snippets": [
+    {
+      "title": "每个品类销售额前三的商品",
+      "lang": "sql",
+      "code": "SELECT category_id, product_id, sales\nFROM (\n  SELECT p.category_id,\n         oi.product_id,\n         SUM(oi.quantity * oi.unit_price) AS sales,\n         ROW_NUMBER() OVER (\n           PARTITION BY p.category_id\n           ORDER BY SUM(oi.quantity * oi.unit_price) DESC\n         ) AS rn\n  FROM order_items oi\n  JOIN orders o ON o.id = oi.order_id\n  JOIN products p ON p.id = oi.product_id\n  WHERE o.status IN (1, 2, 3)\n    AND o.created_at >= '2026-11-01'\n  GROUP BY p.category_id, oi.product_id\n) t\nWHERE rn <= 3\nORDER BY category_id, rn;"
+    },
+    {
+      "title": "每日 GMV 和环比",
+      "lang": "sql",
+      "code": "WITH daily AS (\n  SELECT DATE(created_at) AS d, SUM(total_amount) AS gmv\n  FROM orders\n  WHERE status IN (1, 2, 3)\n    AND created_at >= '2026-10-01'\n  GROUP BY DATE(created_at)\n)\nSELECT d,\n       gmv,\n       LAG(gmv) OVER (ORDER BY d) AS prev_gmv,\n       ROUND((gmv - LAG(gmv) OVER (ORDER BY d))\n             / LAG(gmv) OVER (ORDER BY d) * 100, 2) AS growth_pct\nFROM daily\nORDER BY d;"
+    },
+    {
+      "title": "用户首单时间（拉新统计的基础）",
+      "lang": "sql",
+      "code": "SELECT user_id, MIN(created_at) AS first_order_at\nFROM orders\nWHERE status IN (1, 2, 3)\nGROUP BY user_id\nHAVING first_order_at >= '2026-11-01'\nORDER BY first_order_at;"
+    }
+  ],
+  "pitfalls": [
+    "窗口函数写在 WHERE 里：窗口函数在 SELECT 之后才计算，必须包一层子查询或 CTE 再过滤 rn。",
+    "报表直连主库跑大查询：一条全表 GROUP BY 就能把下单接口拖慢，报表要读从库或离线库。",
+    "不带时间范围或对时间列套函数：WHERE DATE(created_at) >= 某天 会让索引失效，写范围条件。",
+    "用大 OFFSET 分页：LIMIT 1000000, 20 越翻越慢，用「上一页最后一条 id」做游标翻页。"
+  ],
+  "enterprise": "报表和交易要物理隔离：从库或数仓承接报表查询，指标用视图或宽表预聚合；每天跑对账和口径校验，保证两边算出的 GMV 一致。给报表账号设只读权限和 max_execution_time 查询超时，防止一条烂 SQL 拖垮实例；大促时降低报表刷新频率。",
+  "related": [
+    "group-by",
+    "having",
+    "deep-pagination",
+    "read-write-split",
+    "aggregate-functions"
+  ]
+}

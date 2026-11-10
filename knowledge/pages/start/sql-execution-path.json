@@ -1,0 +1,68 @@
+{
+  "id": "sql-execution-path",
+  "titleZh": "一条 SQL 的执行旅程",
+  "title": "How a query executes",
+  "chapter": "start",
+  "difficulty": 2,
+  "minutes": 15,
+  "summary": "一条 SELECT 像一份外卖订单：连接器接单，解析器检查格式，优化器挑最快的路线，执行器照路线去后厨取货，最后 InnoDB 从磁盘一页页翻出数据。搞懂这条流水线，你才会明白为什么 WHERE 写错会慢、为什么 WHERE 里用不了别名。",
+  "sections": [
+    {
+      "heading": "一句话理解：一条 SQL 的四个环节",
+      "text": "连接器（验证身份与权限）→ 解析器（语法对不对）→ 优化器（怎么执行最便宜）→ 执行器（按计划调引擎）→ 存储引擎（真正读数据）。任何一步出问题，现象都不一样：连不上、语法报错、慢查询、数据不对。"
+    },
+    {
+      "heading": "执行计划是优化器给的方案",
+      "text": "优化器会估算用哪个索引、多表 join 谁先谁后、要不要回表，然后生成执行计划。它依赖表的统计信息，而统计信息会过期，所以它偶尔会选错。EXPLAIN 就是看这份计划的镜子，type、key、rows、Extra 四列最值得看。"
+    },
+    {
+      "heading": "书写的顺序不等于执行的顺序",
+      "text": "你写的是 SELECT ... FROM ... JOIN ... WHERE ... GROUP BY ... HAVING ... ORDER BY ... LIMIT。实际逻辑顺序是 FROM/JOIN → WHERE → GROUP BY → 聚合 → HAVING → SELECT → DISTINCT → ORDER BY → LIMIT。所以 WHERE 在 SELECT 之前执行，WHERE 里不能使用 SELECT 定义的列别名。"
+    },
+    {
+      "heading": "为什么这条知识能让你写出更快的 SQL",
+      "text": "知道 WHERE 先于 SELECT，就不会在 WHERE 里套别名；知道优化器靠统计信息，就明白为什么有时要执行 ANALYZE TABLE；知道 LIMIT 最后执行，就理解深分页为什么越翻越慢。顺着执行顺序去优化，比背一堆技巧有用。"
+    },
+    {
+      "heading": "把执行顺序用到写法上",
+      "text": "过滤条件尽量放在 WHERE，让数据更早变小；分组之后再过滤用 HAVING；排序和分页放最后，尽量让 ORDER BY 走索引；能少回表就少回表。一个会看执行顺序的人，写出来的 SQL 天然比 SELECT * 一把梭的人快。"
+    }
+  ],
+  "keyPoints": [
+    "书写顺序是 SELECT → FROM → WHERE → GROUP BY → HAVING → ORDER BY → LIMIT。",
+    "逻辑执行顺序是 FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT。",
+    "WHERE 先于 SELECT 执行，所以 WHERE 里不能用 SELECT 的列别名，HAVING 可以。",
+    "优化器靠统计信息选索引和 join 顺序，统计信息过期就会选错。",
+    "EXPLAIN 是查看优化器最终执行计划的方式。"
+  ],
+  "snippets": [
+    {
+      "title": "看一条查询的执行计划",
+      "lang": "sql",
+      "code": "EXPLAIN SELECT o.id, o.user_id, o.total_amount\nFROM orders o\nWHERE o.status = 'paid'\n  AND o.created_at >= '2026-01-01'\nORDER BY o.created_at DESC\nLIMIT 20;"
+    },
+    {
+      "title": "别名在 HAVING 里能用，在 WHERE 里不能",
+      "lang": "sql",
+      "code": "SELECT user_id, SUM(total_amount) AS total\nFROM orders\nWHERE status = 'paid'\nGROUP BY user_id\nHAVING total > 1000\nORDER BY total DESC;"
+    },
+    {
+      "title": "一条 SQL 把执行顺序走全",
+      "lang": "sql",
+      "code": "SELECT user_id, COUNT(*) AS order_cnt, SUM(total_amount) AS total\nFROM orders\nWHERE status IN ('paid', 'shipped')\nGROUP BY user_id\nHAVING total > 500\nORDER BY total DESC\nLIMIT 10;"
+    }
+  ],
+  "pitfalls": [
+    "以为优化器永远选对索引：统计信息不准、字段类型不一致时会选错，要用 EXPLAIN 验证。",
+    "在 WHERE 里用 SELECT 别名，如 SELECT price * 2 AS p FROM products WHERE p > 100，直接报 Unknown column。",
+    "习惯性 SELECT *：覆盖索引用不上、回表变多，表加字段还可能让程序字段错位。",
+    "WHERE 里对索引列套函数，如 DATE(created_at) = '2026-01-01'，索引直接失效。"
+  ],
+  "enterprise": "企业优化 SQL 的标准动作就是三步：抓慢查询日志，EXPLAIN 看执行计划，按执行顺序改写法（过滤前置、减少回表、让排序走索引）。上线前对核心 SQL 做 plan 评审，比出事故后再救火便宜得多。",
+  "related": [
+    "architecture",
+    "where-filter",
+    "explain",
+    "index-concept"
+  ]
+}

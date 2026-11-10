@@ -1,0 +1,69 @@
+{
+  "id": "expressions-aliases",
+  "titleZh": "计算列、别名与常用函数",
+  "title": "Expressions & functions",
+  "chapter": "sql-basics",
+  "difficulty": 2,
+  "minutes": 12,
+  "summary": "SQL 里可以现场算数：price * quantity 当小计，CONCAT 拼名字，DATE_FORMAT 取月份。别名 AS 就是给算出来的列贴标签。像在 Excel 空白列写公式——原始数据不动，只是这次查询多了一个计算列。",
+  "sections": [
+    {
+      "heading": "一句话理解：计算列和别名",
+      "text": "SELECT 后面不只可以写列名，还可以写表达式和函数：算术运算、字符串拼接、日期格式化、条件判断。AS 给结果列起名，方便阅读和程序取值。计算只发生在这次查询的结果里，不会写回表。"
+    },
+    {
+      "heading": "常用函数分四类",
+      "text": "字符串：CONCAT、SUBSTRING、LENGTH、TRIM；日期：NOW、DATE_FORMAT、DATEDIFF、DATE_ADD；数值：ROUND、CEIL、FLOOR、ABS；条件：CASE WHEN、IF、IFNULL。记住单行函数对每一行独立计算，聚合函数才是把多行合成一行。"
+    },
+    {
+      "heading": "CASE WHEN 是 SQL 的 if",
+      "text": "CASE WHEN 条件 THEN 结果 WHEN 条件 THEN 结果 ELSE 默认值 END，可以给数据打标签、做分段统计。它比多层 IF 可读，也比在代码里循环处理省事。注意条件从上到下匹配，命中一个就停。"
+    },
+    {
+      "heading": "别名在哪里能用、哪里不能",
+      "text": "ORDER BY 和 HAVING 可以用 SELECT 别名；WHERE 不能用，因为 WHERE 在 SELECT 之前执行；GROUP BY 在 MySQL 里可以用别名（扩展语法），但为了可移植性，标准写法是重复表达式或改用子查询。"
+    },
+    {
+      "heading": "函数包在列上会让索引失效",
+      "text": "WHERE DATE(created_at) = '2026-01-01'、WHERE LEFT(phone, 3) = '138' 这类写法，列被函数包住后索引用不上。正确做法是把条件改成范围：created_at >= '2026-01-01' AND created_at < '2026-01-02'，手机号则用 LIKE '138%'。"
+    }
+  ],
+  "keyPoints": [
+    "计算列只出现在查询结果里，不会修改表数据。",
+    "别名用 AS，ORDER BY 和 HAVING 能用，WHERE 不能用。",
+    "CASE WHEN 可以做条件分支，替代多层 IF。",
+    "对索引列套函数（如 DATE(created_at) = ...）会让索引失效。",
+    "除法里除数为 0 返回 NULL，不是报错。",
+    "CONCAT 遇到 NULL，整个结果就是 NULL，需要 COALESCE 兜底。"
+  ],
+  "snippets": [
+    {
+      "title": "算折扣价、拼展示名",
+      "lang": "sql",
+      "code": "SELECT id, name, price,\n       ROUND(price * 0.9, 2) AS sale_price,\n       CONCAT(name, '（', price, '元）') AS label\nFROM products\nWHERE on_sale = 1;"
+    },
+    {
+      "title": "CASE WHEN 给订单分档",
+      "lang": "sql",
+      "code": "SELECT id, user_id, total_amount,\n       CASE\n         WHEN total_amount >= 1000 THEN '大额'\n         WHEN total_amount >= 100 THEN '中额'\n         ELSE '小额'\n       END AS amount_level\nFROM orders;"
+    },
+    {
+      "title": "按月份统计订单量",
+      "lang": "sql",
+      "code": "SELECT DATE_FORMAT(created_at, '%Y-%m') AS month,\n       COUNT(*) AS order_cnt\nFROM orders\nGROUP BY month\nORDER BY month;"
+    }
+  ],
+  "pitfalls": [
+    "在 WHERE 里用别名：WHERE amount_with_tax > 100 报 Unknown column。",
+    "日期函数包住索引列：WHERE DATE(created_at) = '2026-01-01' 变成全表扫描，改成范围条件。",
+    "CONCAT 遇到 NULL 结果整个为 NULL，用 COALESCE 兜底。",
+    "浮点数直接等值比较不可靠，金额先用 DECIMAL 再参与计算。"
+  ],
+  "enterprise": "金额计算放在 SQL 里还是应用里，要有统一口径，避免两边算法不一致；展示字段的别名要规范，方便接口映射；复杂的 CASE 逻辑尽量收敛到维度表或代码里，别在 SQL 里堆几百行分支，后续没人敢改。",
+  "related": [
+    "select-basics",
+    "null-handling",
+    "aggregate-functions",
+    "data-types"
+  ]
+}

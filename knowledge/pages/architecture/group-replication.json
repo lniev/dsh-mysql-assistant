@@ -1,0 +1,58 @@
+{
+  "id": "group-replication",
+  "titleZh": "半同步复制与 MGR",
+  "title": "Semi-sync & MGR",
+  "chapter": "architecture",
+  "difficulty": 4,
+  "minutes": 12,
+  "summary": "异步复制快，但主库一宕机就可能丢最后几个事务；半同步复制要求至少一个从库确认收到日志再提交，牺牲一点延迟换安全；组复制（MGR）则用多数派投票，节点自动选主，还能防止脑裂。这三者是「数据安全」和「延迟、复杂度」之间的三档选择。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "异步复制像寄平信，投进邮筒就走，不管对方收没收到；半同步像挂号信，有人签收才算数；MGR 像一群人开会投票，超过半数同意决议才生效，谁掉线了也能重新选主持人。这三种方式的安全性逐级上升，延迟和复杂度的代价也逐级上升。"
+    },
+    {
+      "heading": "半同步复制怎么工作",
+      "text": "主库提交事务时，等待至少一个从库把日志写到 relay log 并返回 ACK，再给客户端返回成功。如果等超时（rpl_semi_sync_source_timeout），会自动降级成异步，保证主库不被一个慢从库拖死。它能显著降低主库宕机丢数据的概率，但不会自动选主，切换仍要靠中间件或运维脚本。"
+    },
+    {
+      "heading": "组复制 MGR 是什么",
+      "text": "MGR 基于 Paxos 一类的一致性协议：一个事务要在多数节点上认证通过才能提交，少数节点宕机不影响整体。单主模式下一个主节点写、其余节点只读，主节点挂了自动选新主；多主模式允许多个节点同时写，但冲突的事务会被回滚。"
+    },
+    {
+      "heading": "MGR 的硬性要求和代价",
+      "text": "要求 GTID 开启、binlog 用 ROW 格式、只支持 InnoDB、每张表必须有主键，否则节点无法加入。代价是写放大：每个事务都要走多数派确认，延迟比异步高；对网络抖动敏感，节点容易因为通信问题被踢出组；运维和排障复杂度也明显更高。"
+    },
+    {
+      "heading": "怎么选",
+      "text": "普通业务一主两从加半同步兜底，配合中间件做故障切换，已经能覆盖大多数场景。金融级、要求自动切换和更高一致性的系统，可以选 MGR 或云厂商托管的高可用版数据库。选型时先写清能接受丢多少数据（RPO）和多久恢复（RTO），别只比功能列表。"
+    }
+  ],
+  "keyPoints": [
+    "异步复制主库不等从库，最快但可能丢数据。",
+    "半同步要求至少一个从库确认，超时会自动降级为异步。",
+    "MGR 用多数派认证加自动选主，能防脑裂，但延迟和运维成本更高。",
+    "MGR 要求 GTID、ROW binlog、InnoDB 引擎、每张表有主键。",
+    "选型先看能接受的 RPO 和 RTO，而不是追求最新技术。"
+  ],
+  "snippets": [
+    {
+      "title": "查看半同步复制状态",
+      "lang": "sql",
+      "code": "SHOW VARIABLES LIKE 'rpl_semi_sync%';\nSHOW STATUS LIKE 'Rpl_semi_sync%';"
+    },
+    {
+      "title": "查看 MGR 成员与统计",
+      "lang": "sql",
+      "code": "SELECT * FROM performance_schema.replication_group_members;\nSELECT * FROM performance_schema.replication_group_member_stats;"
+    }
+  ],
+  "pitfalls": [
+    "以为开了半同步就不会丢数据：超时降级回异步后，主库宕机照样可能丢。",
+    "MGR 多主模式下两个节点同时改同一行，冲突事务会被回滚，业务要能处理。",
+    "业务表没主键或用了非 InnoDB 引擎，节点直接加不进 MGR。",
+    "网络抖动导致 MGR 节点被踢出组，却没配监控和自动恢复流程。"
+  ],
+  "enterprise": "国内多数业务用「一主两从 + 半同步 + 中间件自动切换」就够；核心交易系统可以选 MGR 或云数据库高可用版，但要接受更高的写入延迟并做节点故障演练。无论选哪档，都要定期模拟主库宕机，验证切换时间和数据完整性。",
+  "related": ["replication", "read-write-split", "binlog", "capacity-planning", "backup-restore"]
+}

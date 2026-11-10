@@ -1,0 +1,69 @@
+{
+  "id": "null-handling",
+  "titleZh": "NULL：数据库里的「空」",
+  "title": "NULL handling",
+  "chapter": "sql-basics",
+  "difficulty": 2,
+  "minutes": 12,
+  "summary": "NULL 不是 0，也不是空字符串，而是「不知道」。像快递单上电话没填，你不知道是漏了还是真没有。任何和 NULL 的比较（包括 NULL = NULL）结果都是「未知」，所以必须用 IS NULL 或 IS NOT NULL 判断。",
+  "sections": [
+    {
+      "heading": "一句话理解：三值逻辑",
+      "text": "普通条件只有真、假两种结果，NULL 引入了第三种：未知。WHERE 只保留结果为真的行，未知会被当成不满足过滤掉。所以 total_amount = NULL 的结果是未知，一行都查不到；NULL 参与算术（NULL + 100）结果也还是 NULL。"
+    },
+    {
+      "heading": "怎么判断 NULL",
+      "text": "用 IS NULL、IS NOT NULL，或者 ISNULL(列) 函数。想给 NULL 一个默认值用 COALESCE(列, 默认值) 或 IFNULL(列, 默认值)；想把某个值转成 NULL 用 NULLIF。写业务查询时，判断「没支付」「没填手机号」都靠 IS NULL。"
+    },
+    {
+      "heading": "聚合函数怎么对待 NULL",
+      "text": "COUNT(*) 数的是行数，包含 NULL；COUNT(列) 只数该列非 NULL 的行。SUM、AVG、MAX、MIN 会自动跳过 NULL，所以 AVG 的分母是非 NULL 的行数，AVG(amount) 不等于 SUM(amount) / COUNT(*)。整列全是 NULL 时，SUM 返回 NULL 而不是 0。"
+    },
+    {
+      "heading": "NOT IN 的经典陷阱",
+      "text": "如果子查询结果里出现一个 NULL，NOT IN 的比较会变成未知，整条查询返回空。比如 WHERE id NOT IN (SELECT user_id FROM orders)，只要有一单 user_id 是 NULL，所有人都会被排除。稳妥写法是 NOT EXISTS 或者 LEFT JOIN ... WHERE 右表主键 IS NULL。"
+    },
+    {
+      "heading": "表设计上怎么减少 NULL",
+      "text": "能确定必填的列就 NOT NULL 加默认值；「未支付」和「支付时间为空」是两种语义，别用一个 NULL 硬表达。唯一索引允许多行 NULL（除非列是 NOT NULL），需要唯一性时别依赖 NULL。历史数据迁移时用 IS NULL 校验，比 NOT IN 安全。"
+    }
+  ],
+  "keyPoints": [
+    "NULL 表示未知或缺失，不等于 0，也不等于空字符串。",
+    "判断 NULL 只能用 IS NULL / IS NOT NULL，= NULL 永远不成立。",
+    "COUNT(*) 数行，COUNT(列) 跳过 NULL。",
+    "SUM、AVG、MAX、MIN 都自动忽略 NULL，AVG 的分母是非 NULL 行数。",
+    "NOT IN 的子查询里只要出现 NULL，整个条件就永远不成立。",
+    "唯一索引允许多行 NULL，需要唯一性时别依赖 NULL。"
+  ],
+  "snippets": [
+    {
+      "title": "找出没填城市的用户",
+      "lang": "sql",
+      "code": "SELECT id, name, phone, city\nFROM users\nWHERE city IS NULL;"
+    },
+    {
+      "title": "用 COALESCE 给空值兜底",
+      "lang": "sql",
+      "code": "SELECT id, name, COALESCE(city, '未填写') AS city_display\nFROM users;"
+    },
+    {
+      "title": "找「从没下过单」的用户（反连接，比 NOT IN 安全）",
+      "lang": "sql",
+      "code": "SELECT u.id, u.name\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE o.id IS NULL;"
+    }
+  ],
+  "pitfalls": [
+    "WHERE city = NULL 或 <> NULL：结果永远为空，必须用 IS NULL。",
+    "COUNT(phone) 比 COUNT(*) 少，因为手机号没填的行被跳过了。",
+    "NOT IN 子查询返回 NULL 时整条查询返回空，改用 NOT EXISTS 或 LEFT JOIN ... IS NULL。",
+    "把 NULL 当 0 参与计算：NULL + 100 还是 NULL，需要 IFNULL(amount, 0) 兜底。"
+  ],
+  "enterprise": "表设计尽量 NOT NULL 加默认值，把「未知」和「零值」分开；报表统一空值口径，用 COALESCE 兜底；对外接口区分 null 与空字符串的语义；历史数据迁移时用 IS NULL 做校验，避免 NOT IN 类查询静默返回空结果。",
+  "related": [
+    "where-filter",
+    "aggregate-functions",
+    "data-types",
+    "unique-check-default"
+  ]
+}

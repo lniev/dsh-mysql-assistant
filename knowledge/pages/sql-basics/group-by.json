@@ -1,0 +1,69 @@
+{
+  "id": "group-by",
+  "titleZh": "GROUP BY：分组统计",
+  "title": "GROUP BY",
+  "chapter": "sql-basics",
+  "difficulty": 2,
+  "minutes": 15,
+  "summary": "GROUP BY 是「按标签分堆」：把 orders 按 user_id 分成一堆一堆，再对每堆算 COUNT、SUM。像超市把购物小票按会员分堆，最后给每个会员出一张消费汇总。SELECT 里没被聚合的列，都必须出现在 GROUP BY 里。",
+  "sections": [
+    {
+      "heading": "一句话理解：分组加聚合",
+      "text": "GROUP BY 把行按某几列的值分堆，每个堆输出一行。SELECT 里要么写分组列，要么写聚合函数。比如按 status 分组数订单、按 category_id 分组算商品数、按月份分组算 GMV，都是同一个套路。"
+    },
+    {
+      "heading": "怎么写",
+      "text": "SELECT 分组列, 聚合函数 FROM 表 [WHERE 条件] GROUP BY 分组列 [HAVING 条件] [ORDER BY 排序] [LIMIT 条数]。多列分组是「组合」：GROUP BY user_id, status 会按「用户 + 状态」的每种组合各出一行。"
+    },
+    {
+      "heading": "执行顺序：先筛行，再分组",
+      "text": "WHERE 在分组前过滤行，只留下要统计的数据；GROUP BY 再分堆；聚合函数在堆内计算；HAVING 在分组后过滤堆。所以行级条件放 WHERE，组级条件放 HAVING，这样中间数据量最小。"
+    },
+    {
+      "heading": "ONLY_FULL_GROUP_BY 是怎么回事",
+      "text": "5.7 之后默认开启 ONLY_FULL_GROUP_BY：SELECT 里出现的非聚合列必须在 GROUP BY 里声明，否则报错。这是好事，避免了「随便取一行」的随机结果。确实要取任意一行时用 ANY_VALUE(列)，但要清楚自己在做什么。"
+    },
+    {
+      "heading": "分组后排序与 TopN",
+      "text": "ORDER BY 可以用聚合结果或它的别名，例如 ORDER BY total DESC，配合 LIMIT 就是整体 TopN 报表。如果要「每个分组内取 TopN」，那得用窗口函数，GROUP BY 做不到行级排名。"
+    }
+  ],
+  "keyPoints": [
+    "GROUP BY 把行分堆，每组输出一行。",
+    "SELECT 里的非聚合列必须出现在 GROUP BY 中。",
+    "WHERE 在分组前过滤行，HAVING 在分组后过滤组。",
+    "多列 GROUP BY 是按组合分组，不是两列各自分组。",
+    "分组后排序用 ORDER BY 聚合结果或别名。",
+    "分组列的 NULL 会被当成同一组。"
+  ],
+  "snippets": [
+    {
+      "title": "按用户统计消费",
+      "lang": "sql",
+      "code": "SELECT user_id,\n       COUNT(*) AS order_cnt,\n       SUM(total_amount) AS total\nFROM orders\nWHERE status IN ('paid', 'shipped')\nGROUP BY user_id\nORDER BY total DESC\nLIMIT 10;"
+    },
+    {
+      "title": "按月统计订单和 GMV",
+      "lang": "sql",
+      "code": "SELECT DATE_FORMAT(created_at, '%Y-%m') AS month,\n       COUNT(*) AS order_cnt,\n       SUM(total_amount) AS gmv\nFROM orders\nGROUP BY month\nORDER BY month;"
+    },
+    {
+      "title": "按状态分组数订单",
+      "lang": "sql",
+      "code": "SELECT status, COUNT(*) AS cnt\nFROM orders\nGROUP BY status;"
+    }
+  ],
+  "pitfalls": [
+    "SELECT 里有未聚合也未分组的列：ONLY_FULL_GROUP_BY 直接报错，5.7 之前则是随机取一行，更坑。",
+    "行级过滤写进 HAVING：能跑，但先分组再过滤，白白多干活。",
+    "分组列存在 NULL：所有 NULL 会被当成同一组，统计结果要留意。",
+    "GROUP BY 后依赖隐式排序：8.0 不保证顺序，要顺序必须写 ORDER BY。"
+  ],
+  "enterprise": "报表 SQL 一律显式 ORDER BY；分组列尽量落在索引里（或利用联合索引前缀）减少临时表；业务库不跑全表 GROUP BY，大报表走离线数仓或汇总表；订正数据前先按分组口径核对总数，避免漏掉 NULL 组。",
+  "related": [
+    "having",
+    "aggregate-functions",
+    "distinct",
+    "where-filter"
+  ]
+}

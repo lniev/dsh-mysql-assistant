@@ -1,0 +1,69 @@
+{
+  "id": "join-inner",
+  "titleZh": "INNER JOIN：表与表的交集",
+  "title": "INNER JOIN",
+  "chapter": "sql-basics",
+  "difficulty": 3,
+  "minutes": 18,
+  "summary": "INNER JOIN 是「两张表按共同字段配对，只保留配上的」：像把订单表和用户表按 user_id 拼起来，只有两边都存在的才留下。查「下单用户的姓名 + 订单金额」就必须 join；不 join 只能拿到一堆 id，看不出人名。",
+  "sections": [
+    {
+      "heading": "一句话理解：只留交集",
+      "text": "JOIN 用来把两张表按关联字段拼成一张宽表。INNER JOIN 只保留两边都能匹配上的行，配不上的直接不要。FROM a INNER JOIN b ON a.x = b.y 里的 ON 就是配对规则；JOIN 前面不写 INNER，默认也是 INNER JOIN。"
+    },
+    {
+      "heading": "为什么要 join",
+      "text": "数据库设计讲究拆表：用户信息放 users，订单放 orders，避免重复存储。查列表时再按 user_id 拼回去。join 的价值就是「按需组装」：数据存储时拆开省空间、好维护，查询时拼起来才看得懂。"
+    },
+    {
+      "heading": "join 怎么执行、索引怎么用",
+      "text": "MySQL 常用 Nested Loop：拿驱动表的一行，去被驱动表按连接列找匹配。被驱动表的连接列必须有索引，否则每一行都全表扫，开销会爆炸。EXPLAIN 里 type 是 ALL、rows 很大，就要检查连接列有没有索引。"
+    },
+    {
+      "heading": "笛卡尔积警告",
+      "text": "忘写 ON，或者 ON 条件恒真，结果就是两表行数相乘：1 万用户乘 10 万订单等于 10 亿行，数据库直接被拖垮。另一个隐藏问题是 ON 条件只写了一半，会导致重复匹配、金额被放大，报表数字看起来「多了」。"
+    },
+    {
+      "heading": "多表 join 的写法",
+      "text": "三个表 join 时给每张表起短别名（o、u、oi、p），同名列前一定要带别名。连接顺序上，通常让小结果集做驱动表；复杂查询交给优化器，但可以用 STRAIGHT_JOIN 强制（慎用）。聚合之前先确认 join 没有把行数放大。"
+    }
+  ],
+  "keyPoints": [
+    "INNER JOIN 只保留两边都匹配上的行。",
+    "ON 写连接条件，WHERE 写过滤条件；在 LEFT JOIN 里放错位置结果会完全不同。",
+    "JOIN 不写 ON 或条件恒真会产生笛卡尔积，行数是两表行数相乘。",
+    "被驱动表的连接列要有索引，否则每次匹配都全表扫。",
+    "多表 JOIN 用别名区分同名列，取列时写 别名.列名。",
+    "join 完再聚合之前，先确认没有把行数放大。"
+  ],
+  "snippets": [
+    {
+      "title": "订单拼用户",
+      "lang": "sql",
+      "code": "SELECT o.id, u.name, o.total_amount, o.created_at\nFROM orders o\nINNER JOIN users u ON u.id = o.user_id\nWHERE o.status = 'paid'\nORDER BY o.created_at DESC\nLIMIT 20;"
+    },
+    {
+      "title": "订单、明细、商品三表",
+      "lang": "sql",
+      "code": "SELECT o.id AS order_id, p.name AS product_name, oi.quantity, oi.unit_price\nFROM orders o\nJOIN order_items oi ON oi.order_id = o.id\nJOIN products p ON p.id = oi.product_id\nWHERE o.id = 1001;"
+    },
+    {
+      "title": "按城市统计订单量",
+      "lang": "sql",
+      "code": "SELECT u.city, COUNT(*) AS order_cnt\nFROM orders o\nJOIN users u ON u.id = o.user_id\nWHERE o.status = 'paid'\nGROUP BY u.city\nORDER BY order_cnt DESC;"
+    }
+  ],
+  "pitfalls": [
+    "忘记写 ON：行数变成笛卡尔积，几百万行瞬间把数据库拖垮。",
+    "把过滤条件写在 ON 还是 WHERE：对 INNER JOIN 结果一样，对 LEFT JOIN 完全不同。",
+    "两表有同名列（如 id）却只写 id，直接报 ambiguous column。",
+    "JOIN 字段类型或字符集不一致（VARCHAR 对 INT）导致隐式转换、索引失效。"
+  ],
+  "enterprise": "关联字段统一类型和字符集（BIGINT 对 BIGINT，utf8mb4 对 utf8mb4）；大表 join 必看 EXPLAIN 的 type、key、rows；分库分表后跨库 join 不可用，要靠冗余字段或应用层拼装；join 后再聚合的报表要核对行数，防止重复放大 GMV。",
+  "related": [
+    "join-outer",
+    "select-basics",
+    "index-concept",
+    "ecommerce-schema"
+  ]
+}

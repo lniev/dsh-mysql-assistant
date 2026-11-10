@@ -1,0 +1,69 @@
+{
+  "id": "first-database",
+  "titleZh": "第一个数据库与第一张表",
+  "title": "First database",
+  "chapter": "start",
+  "difficulty": 1,
+  "minutes": 15,
+  "summary": "建库建表就像给新家划房间、摆家具：CREATE DATABASE 分出房间，CREATE TABLE 摆出表格，INSERT 往里放东西。照着敲一遍电商最小三张表，你就有了能跑后续所有示例的练习场。",
+  "sections": [
+    {
+      "heading": "一句话理解：库、表、字段、类型",
+      "text": "库是最外层容器，表是库里的数据单元，字段是表的列，每个字段要选类型。建库建表属于 DDL（数据定义），插入数据属于 DML（数据操作）。新手最容易在这步把类型选错，比如金额用 FLOAT、时间用字符串，后面全是坑。"
+    },
+    {
+      "heading": "先建库，再选库",
+      "text": "CREATE DATABASE shop DEFAULT CHARACTER SET utf8mb4; 建完用 USE shop; 切进去，之后的建表默认落在这个库。库名、表名用小写加下划线，别用中文和关键字，跨平台更省心。"
+    },
+    {
+      "heading": "建表：类型先选对",
+      "text": "主键用 BIGINT UNSIGNED AUTO_INCREMENT；金额用 DECIMAL(10,2) 而不是 FLOAT；短文本用 VARCHAR；状态用 TINYINT 或 VARCHAR；时间用 DATETIME 或 TIMESTAMP；布尔值用 TINYINT(1)。每张表最好带 created_at 和 updated_at。"
+    },
+    {
+      "heading": "插几条数据看看",
+      "text": "INSERT 时显式写列名，值按列顺序给，字符串和日期加单引号。插完用 SELECT 确认一下：行数对不对、字段有没有串列。练习环境可以随便造数据，生产环境才需要那么多谨慎，别把练习习惯带到线上。"
+    },
+    {
+      "heading": "最小电商三张表长什么样",
+      "text": "users 存用户，products 存商品，orders 存订单，order_items 存订单明细。后面所有 SQL 示例都基于这几张表，先把它们建出来，学 WHERE、JOIN、GROUP BY 时就能直接练。"
+    }
+  ],
+  "keyPoints": [
+    "先 CREATE DATABASE 建库，再 USE 选库，最后 CREATE TABLE 建表。",
+    "主键用 BIGINT UNSIGNED AUTO_INCREMENT，金额必须用 DECIMAL。",
+    "字符串列用 VARCHAR，时间用 DATETIME/TIMESTAMP，布尔用 TINYINT(1)。",
+    "INSERT 显式写列名，避免表结构变化导致错位。",
+    "练习库可以随便建，生产建表要走评审和 migration。",
+    "每张表都带 created_at/updated_at，排查问题时非常有用。"
+  ],
+  "snippets": [
+    {
+      "title": "建库并切换进去",
+      "lang": "sql",
+      "code": "CREATE DATABASE IF NOT EXISTS shop\n  DEFAULT CHARACTER SET utf8mb4\n  COLLATE utf8mb4_0900_ai_ci;\nUSE shop;"
+    },
+    {
+      "title": "建一张商品表",
+      "lang": "sql",
+      "code": "CREATE TABLE products (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  category_id BIGINT UNSIGNED NOT NULL,\n  name VARCHAR(120) NOT NULL,\n  price DECIMAL(10, 2) NOT NULL,\n  stock INT NOT NULL DEFAULT 0,\n  on_sale TINYINT(1) NOT NULL DEFAULT 1,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (id),\n  KEY idx_category (category_id)\n) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;"
+    },
+    {
+      "title": "插数据再查回来",
+      "lang": "sql",
+      "code": "INSERT INTO products (category_id, name, price, stock, on_sale)\nVALUES (1, '降噪蓝牙耳机', 299.00, 120, 1),\n       (1, '机械键盘', 459.00, 60, 1),\n       (2, '纯棉T恤', 89.00, 300, 1);\n\nSELECT id, name, price, stock\nFROM products\nORDER BY price DESC;"
+    }
+  ],
+  "pitfalls": [
+    "金额用 FLOAT/DOUBLE：0.1 + 0.2 会得到 0.30000000000000004，必须用 DECIMAL。",
+    "建表不带主键：InnoDB 会偷偷造一个隐藏主键，更新和复制都更慢。",
+    "表名或字段名用关键字（order、group、desc），每次都要加反引号，迟早踩坑。",
+    "删表不确认环境：DROP TABLE 没有回收站，误删只能靠备份。"
+  ],
+  "enterprise": "企业建表不手敲：DDL 进版本库，通过 Flyway 或 Liquibase 这类 migration 工具发布，评审时看类型、索引、注释和字符集。生产禁止直接改表结构，大表变更走 online DDL 工具，并且每张表都要有主键和审计时间字段。",
+  "related": [
+    "install-and-connect",
+    "create-table",
+    "data-types",
+    "insert"
+  ]
+}

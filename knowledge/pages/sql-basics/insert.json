@@ -1,0 +1,64 @@
+{
+  "id": "insert",
+  "titleZh": "INSERT：插入数据",
+  "title": "INSERT",
+  "chapter": "sql-basics",
+  "difficulty": 1,
+  "minutes": 12,
+  "summary": "INSERT 是往表里「放东西」：像往 Excel 里新加一行，但必须先对齐列——列名和值一一对应。别裸写 INSERT INTO 表 VALUES(...)，因为表一加字段，整条语句就错位了。",
+  "sections": [
+    {
+      "heading": "一句话理解：指定列、给值",
+      "text": "标准写法是 INSERT INTO 表 (列1, 列2) VALUES (值1, 值2)。显式写列名，值和列一一对应；自增主键不用写；想用默认值就写 DEFAULT。省略列名时要求值的顺序和表结构完全一致，非常脆弱。"
+    },
+    {
+      "heading": "批量插入比循环快",
+      "text": "一条 INSERT 带多个 VALUES 比循环单条插入快得多：只有一次网络往返、一次事务开销。一次别塞几十万行，500 到 1000 行一批比较稳；超大事务会让 undo log 膨胀、锁等待变长。"
+    },
+    {
+      "heading": "插入冲突怎么办",
+      "text": "INSERT IGNORE 遇到唯一键冲突就跳过（但也会吞掉其他错误）；INSERT ... ON DUPLICATE KEY UPDATE 冲突时改成更新，适合做幂等 upsert；REPLACE INTO 是先删后插，会触发删除相关逻辑，慎用。"
+    },
+    {
+      "heading": "插完怎么拿到自增 id",
+      "text": "同一条连接里用 SELECT LAST_INSERT_ID() 拿最新自增 id；程序里更常见的是让驱动返回 generated keys。批量插入时只返回第一个 id，后续 id 一般按连续自增推算，但别在并发下依赖这个假设。"
+    },
+    {
+      "heading": "INSERT ... SELECT 的用法",
+      "text": "可以把查询结果直接写进另一张表：INSERT INTO 表 (列...) SELECT ... FROM ...，常用于归档、生成报表中间表、数据迁移。注意源表和目标表不要是同一张，否则行数可能翻倍。"
+    }
+  ],
+  "keyPoints": [
+    "INSERT 一定要写列名，省略列名依赖表结构顺序，加字段就错位。",
+    "多行 VALUES 批量插入比循环单条快，但要分批提交。",
+    "自增主键列不要手工赋值，交给 AUTO_INCREMENT。",
+    "INSERT ... ON DUPLICATE KEY UPDATE 可以做 upsert，但要防死锁和自增跳号。",
+    "REPLACE INTO 是先删后插，会触发删除逻辑，慎用。",
+    "批量插入失败会整批回滚，排查要逐行定位。"
+  ],
+  "snippets": [
+    {
+      "title": "插入用户并拿自增 id",
+      "lang": "sql",
+      "code": "INSERT INTO users (name, phone, city)\nVALUES ('张伟', '13800000001', '北京'),\n       ('李娜', '13800000002', '上海');\n\nSELECT LAST_INSERT_ID() AS first_new_id;"
+    },
+    {
+      "title": "库存 upsert：有就累加，没有就新建",
+      "lang": "sql",
+      "code": "INSERT INTO inventory (product_id, stock, updated_at)\nVALUES (1001, 50, NOW())\nON DUPLICATE KEY UPDATE stock = stock + 50,\n                        updated_at = NOW();"
+    }
+  ],
+  "pitfalls": [
+    "不写列名：表新增一列后，INSERT ... VALUES 直接报 Column count doesn't match value count。",
+    "以为 INSERT IGNORE 只是忽略重复：它也会把数据截断等错误变成警告，数据可能悄悄变形。",
+    "超大批量插入放在一个事务里：undo 膨胀、锁等待变长，要分批提交。",
+    "REPLACE INTO 会删除旧行再插入，导致自增 id 变化、触发级联删除。"
+  ],
+  "enterprise": "写接口必须参数化 SQL，绝不拼接字符串，防注入；批量导入分批提交并带幂等键，重复请求不会插出重复单；订单类写入配合事务，主表和明细一起提交或一起回滚；自增主键统一用 BIGINT UNSIGNED，别等数据量上来才后悔。",
+  "related": [
+    "update",
+    "delete",
+    "create-table",
+    "auto-increment"
+  ]
+}

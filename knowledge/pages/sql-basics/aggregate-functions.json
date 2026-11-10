@@ -1,0 +1,69 @@
+{
+  "id": "aggregate-functions",
+  "titleZh": "聚合函数：COUNT / SUM / AVG",
+  "title": "Aggregate functions",
+  "chapter": "sql-basics",
+  "difficulty": 2,
+  "minutes": 12,
+  "summary": "聚合函数是「把一堆数合成一个数」：COUNT 数个数、SUM 求和、AVG 求平均、MAX 和 MIN 找最值。像把一筐小票汇总成一张日报表：总销售额、客单价、最大单笔，一行结果看完今天生意。",
+  "sections": [
+    {
+      "heading": "一句话理解：多行变一行",
+      "text": "普通函数对每一行算一次，聚合函数把多行合成一行。不带 GROUP BY 时，整张表就是一组，SELECT COUNT(*), SUM(total_amount) FROM orders 只返回一行。带上 GROUP BY 才变成每组一行。"
+    },
+    {
+      "heading": "五个常用函数",
+      "text": "COUNT(*) 数行数；COUNT(列) 只数该列非 NULL 的行；SUM 求和；AVG 求平均；MAX/MIN 找最大最小。COUNT(DISTINCT 列) 数不同的值。它们都可以和 WHERE 配合，先筛行再汇总。"
+    },
+    {
+      "heading": "聚合和 NULL 的关系",
+      "text": "SUM、AVG、MAX、MIN 都会跳过 NULL；COUNT(*) 不跳过。整列全是 NULL 时 SUM 返回 NULL，COUNT 返回 0。所以算平均客单价时，AVG(total_amount) 的分母是金额非空的行数，和 SUM 除以 COUNT(*) 的结果可能不一样。"
+    },
+    {
+      "heading": "空结果时返回什么",
+      "text": "没有任何行满足条件时，COUNT 返回 0，SUM、AVG、MAX、MIN 返回 NULL。报表里直接展示 NULL 很不友好，用 IFNULL(SUM(total_amount), 0) 兜底，或者在应用层处理。"
+    },
+    {
+      "heading": "别把聚合和普通列混着写",
+      "text": "SELECT user_id, SUM(total_amount) FROM orders 在 ONLY_FULL_GROUP_BY 模式下会报错，因为 user_id 既没聚合也没分组。正确写法是 GROUP BY user_id。5.7 之前不报错但随机取一行，更危险。"
+    }
+  ],
+  "keyPoints": [
+    "不带 GROUP BY 的聚合把整张表当成一组。",
+    "COUNT(*) 数行数，COUNT(列) 只数非 NULL。",
+    "SUM、AVG、MAX、MIN 自动跳过 NULL。",
+    "AVG(x) 不等于 SUM(x) / COUNT(*)，因为分母不含 NULL。",
+    "空表时 COUNT 是 0，SUM、AVG、MAX、MIN 是 NULL。",
+    "非聚合列必须出现在 GROUP BY 里，否则 ONLY_FULL_GROUP_BY 会报错。"
+  ],
+  "snippets": [
+    {
+      "title": "整表汇总",
+      "lang": "sql",
+      "code": "SELECT COUNT(*) AS order_cnt,\n       SUM(total_amount) AS gmv,\n       AVG(total_amount) AS avg_order_value,\n       MAX(total_amount) AS max_order\nFROM orders\nWHERE status = 'paid';"
+    },
+    {
+      "title": "COUNT(*) 和 COUNT(列) 的差别",
+      "lang": "sql",
+      "code": "SELECT COUNT(*) AS all_users,\n       COUNT(city) AS city_filled\nFROM users;"
+    },
+    {
+      "title": "空结果用 IFNULL 兜底",
+      "lang": "sql",
+      "code": "SELECT IFNULL(SUM(total_amount), 0) AS gmv\nFROM orders\nWHERE status = 'refunded';"
+    }
+  ],
+  "pitfalls": [
+    "SELECT user_id, SUM(total_amount) FROM orders 不分组：ONLY_FULL_GROUP_BY 下直接报错。",
+    "用 SUM(amount) / COUNT(*) 算平均：NULL 行被算进分母，均值被拉低。",
+    "以为 COUNT(1) 比 COUNT(*) 快：InnoDB 里两者执行方式一样，别信传言。",
+    "想过滤聚合结果却写在 WHERE 里：WHERE 在聚合前执行，要用 HAVING。"
+  ],
+  "enterprise": "报表先定口径：含不含退款、要不要去重、金额用哪个字段。大表别每次现算 COUNT(*)，用汇总表或缓存；金额一律 DECIMAL，SUM 之后再统一舍入，避免逐行舍入的误差累积。",
+  "related": [
+    "group-by",
+    "having",
+    "null-handling",
+    "distinct"
+  ]
+}

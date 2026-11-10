@@ -1,0 +1,70 @@
+{
+  "id": "hot-account",
+  "titleZh": "热点账户更新",
+  "title": "Hot account updates",
+  "chapter": "enterprise",
+  "difficulty": 4,
+  "minutes": 15,
+  "summary": "热点账户就是全公司都在改同一行数据：秒杀商品的库存行、平台的总分账账户。几百个请求同时 UPDATE 同一行，InnoDB 只能让它们排队，接口响应从毫秒涨到几秒，连接池很快被占满。这时候 SQL 再优化也没用，得从「减少争抢同一行」的角度解决。",
+  "sections": [
+    {
+      "heading": "先看业务现场",
+      "text": "平台佣金账户每秒要加几百笔分账，那一行的行锁一直被占着，后面的请求全在等锁。监控上表现为 Threads_running 飙升、QPS 不算低但接口大量超时、慢查询日志里反复出现同一条极其简单的 UPDATE。"
+    },
+    {
+      "heading": "为什么慢",
+      "text": "不是 SQL 写得差，是同一行的行锁同一时刻只能一个事务持有，其它全在排队。排队还会把事务拖长，事务越长锁越久，很快雪崩。换分布式锁或消息队列只是把排队挪个地方，根子还是「同一行被高频写」。"
+    },
+    {
+      "heading": "方案一：拆账户（分桶）",
+      "text": "把一个账户拆成 N 个子账户（桶），写入按用户 id 或订单号取模落到不同桶，余额 = 各桶之和。并发度直接提高 N 倍，读取时 SUM 一次。N 一般取 8~64，拆太碎会让汇总变慢，还增加对账复杂度。"
+    },
+    {
+      "heading": "方案二：先记账后汇总",
+      "text": "高频写只插入流水表（只追加、不更新，没有热点行），余额由定时任务或查询时 SUM 计算；流水表按时间分区，定期把历史汇总进快照表。牺牲一点实时性换吞吐，适合佣金、积分这类允许秒级延迟的场景。"
+    },
+    {
+      "heading": "方案三：削峰和合并",
+      "text": "秒杀把请求先塞进队列，后台按固定速率消费；多笔操作在内存里合并成一次 UPDATE（比如每秒合并一次）；热点行尽量放在短事务里，别在事务中做远程调用和发消息，锁持有时间能缩短一个数量级。"
+    }
+  ],
+  "keyPoints": [
+    "热点账户慢在行锁排队，不是 SQL 语法问题，加索引没用。",
+    "拆分桶或子账户是最直接的方案，读取时汇总，写入按 key 取模分散。",
+    "流水表只插入不更新，天然没有热点行，汇总用定时任务或快照表。",
+    "缩短事务、避免事务内远程调用，能明显减少锁持有时间。",
+    "秒杀类场景先队列削峰再落库，别让数据库直面峰值。",
+    "金额类数据拆分后必须对账，确保汇总余额和流水一致。"
+  ],
+  "snippets": [
+    {
+      "title": "查看行锁等待",
+      "lang": "sql",
+      "code": "SELECT * FROM performance_schema.data_lock_waits;\nSELECT * FROM sys.innodb_lock_waits;"
+    },
+    {
+      "title": "分桶账户扣减",
+      "lang": "sql",
+      "code": "-- 假设 account_bucket 表把账户 1001 拆成 16 个桶，桶号 0~15\nUPDATE account_bucket\nSET balance = balance - 10, updated_at = NOW()\nWHERE account_id = 1001 AND bucket_no = 7 AND balance >= 10;"
+    },
+    {
+      "title": "流水记账，再用汇总算余额",
+      "lang": "sql",
+      "code": "CREATE TABLE account_flow (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  account_id BIGINT UNSIGNED NOT NULL,\n  biz_no VARCHAR(40) NOT NULL,\n  amount DECIMAL(12,2) NOT NULL,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id),\n  UNIQUE KEY uk_biz (biz_no),\n  KEY idx_account_time (account_id, created_at)\n) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;\nINSERT INTO account_flow (account_id, biz_no, amount)\nVALUES (1001, 'order-9001-fee', -10.00);\nSELECT account_id, SUM(amount) AS balance\nFROM account_flow\nWHERE account_id = 1001\nGROUP BY account_id;"
+    }
+  ],
+  "pitfalls": [
+    "给热点行加索引、改 SQL 写法：锁排队是并发模型问题，优化 SQL 治不了本。",
+    "用乐观锁版本号解决热点：冲突越多重试越多，反而把 QPS 放大好几倍。",
+    "在事务里调远程接口或发消息：锁持有时间从毫秒变秒级，热点被放大几十倍。",
+    "拆桶后不做对账：某个桶写失败，汇总余额和真实流水对不上，越滚越大。"
+  ],
+  "enterprise": "佣金、积分、余额这类账户先评估写入峰值：单行每秒超过几百次就考虑分桶或流水化。分桶数按峰值定，读取走汇总视图；流水表按业务号加唯一键防重复；T+1 对账把「汇总余额 = 流水合计 = 业务单据合计」三方对齐。大促前单独压测热点账户。",
+  "related": [
+    "inventory-oversell",
+    "monitoring",
+    "lock-types",
+    "transaction-pitfalls",
+    "sharding"
+  ]
+}

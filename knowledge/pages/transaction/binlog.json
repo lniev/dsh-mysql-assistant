@@ -1,0 +1,63 @@
+{
+  "id": "binlog",
+  "titleZh": "binlog：写入的流水账",
+  "title": "Binlog",
+  "chapter": "transaction",
+  "difficulty": 3,
+  "minutes": 12,
+  "summary": "binlog 是 MySQL 的「流水账」：每一次会改数据的操作，都按提交顺序记在这本账上，谁在什么时候改了什么。它不管引擎内部怎么存页，只记逻辑操作，所以能拿去做主从复制、按时间点恢复数据、给下游同步变更。redo log 是 InnoDB 自己的账，binlog 是整台 MySQL 服务器的账。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "像店铺的营业流水：每笔进出都记一行，晚上对账、开分店时照着流水抄一遍都靠它。binlog 记的是「发生了什么」，不是「磁盘上哪个位置变成了什么」，所以换一种引擎、换一台机器也能照着重放。"
+    },
+    {
+      "heading": "三种格式，怎么选",
+      "text": "STATEMENT 记 SQL 原文，日志小，但 NOW()、RANDOM()、带 LIMIT 却没 ORDER BY 的语句会导致主从不一致。ROW 记每一行改前改后的值，最安全，是生产推荐的格式，缺点是日志体积大。MIXED 让 MySQL 自动在两者之间选。现在几乎没有理由不用 ROW。"
+    },
+    {
+      "heading": "提交时怎么保证和 redo 一致",
+      "text": "一次事务提交会走两阶段提交：先把 redo 写成 prepare 状态，再写 binlog 并 fsync 落盘，最后把 redo 标记为 commit。这样即使中途崩溃，恢复时也能根据 binlog 是否完整决定提交还是回滚，避免出现「主库有、从库没有」或者反过来。"
+    },
+    {
+      "heading": "binlog 能干的四件事",
+      "text": "主从复制：从库拉取 binlog 写入 relay log 再重放。时间点恢复：全量备份加上从备份位点开始的 binlog 重放，可以恢复到误删前一秒。数据订阅：Canal、Debezium 解析 ROW 格式做 CDC，把变更同步到数仓、搜索或缓存。审计与回查：事故时能看出是哪条 SQL 改了什么。"
+    },
+    {
+      "heading": "日常怎么管",
+      "text": "binlog 会按大小滚动（max_binlog_size），过期自动清理（binlog_expire_logs_seconds，默认 30 天）。必须监控 binlog 目录使用率，否则写满磁盘会让实例只读甚至重启。维护操作临时不想记 binlog，可以 SET sql_log_bin=0，但需要相应权限，且用完立刻打开。"
+    }
+  ],
+  "keyPoints": [
+    "binlog 是 Server 层逻辑日志，所有引擎共用；redo 是 InnoDB 物理日志。",
+    "生产推荐 ROW 格式加 sync_binlog=1，主从一致性和安全性最好。",
+    "主从复制靠 binlog，时间点恢复也靠 binlog。",
+    "binlog 会滚动和过期清理，默认保留 30 天，要监控磁盘。",
+    "两阶段提交保证 redo 与 binlog 一致，不会一边有一边没有。"
+  ],
+  "snippets": [
+    {
+      "title": "确认 binlog 是否开启、什么格式",
+      "lang": "sql",
+      "code": "SHOW VARIABLES LIKE 'log_bin';\nSHOW VARIABLES LIKE 'binlog_format';\nSHOW VARIABLES LIKE 'binlog_expire_logs_seconds';"
+    },
+    {
+      "title": "看有哪些日志文件、里面记了什么",
+      "lang": "sql",
+      "code": "SHOW BINARY LOGS;\nSHOW BINLOG EVENTS IN 'binlog.000001' LIMIT 20;"
+    },
+    {
+      "title": "维护时临时关闭本会话的 binlog",
+      "lang": "sql",
+      "code": "SET SESSION sql_log_bin = 0;\nUPDATE products SET stock = stock WHERE id = 1001;\nSET SESSION sql_log_bin = 1;"
+    }
+  ],
+  "pitfalls": [
+    "为了省空间用 STATEMENT 格式，结果主从数据不一致（函数、随机值、无排序的 LIMIT）。",
+    "只做全量备份不备份 binlog，误删数据后只能恢复到昨天，丢一天数据。",
+    "sync_binlog=0 追求性能，主库宕机时 binlog 可能丢最后一截，从库跟着丢。",
+    "binlog 和数据放同一块盘且不监控，写满磁盘导致实例只读甚至起不来。"
+  ],
+  "enterprise": "生产标准配置是 ROW 格式、sync_binlog=1、定期全量备份，并把 binlog 持续归档到独立存储，才能做到按时间点恢复。还要监控 binlog 目录使用率、设置合理的过期天数，大促前预估写入量，避免磁盘被日志写满引发线上事故。",
+  "related": ["replication", "undo-redo-log", "backup-restore", "migration", "read-write-split"]
+}

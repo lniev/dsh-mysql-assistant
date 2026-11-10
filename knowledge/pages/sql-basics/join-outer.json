@@ -1,0 +1,69 @@
+{
+  "id": "join-outer",
+  "titleZh": "LEFT / RIGHT JOIN：保留一边",
+  "title": "Outer joins",
+  "chapter": "sql-basics",
+  "difficulty": 3,
+  "minutes": 15,
+  "summary": "LEFT JOIN 是「以左边表为主，右边配不上也保留」：像点名——左边是所有学生（users），右边是交作业记录（orders），没交作业的学生也要出现在名单里，只是作业那几列是 NULL。查「哪些用户从没下过单」就靠它。",
+  "sections": [
+    {
+      "heading": "一句话理解：保留一边",
+      "text": "LEFT JOIN 保留左表所有行，右表能配上就填值，配不上就补 NULL。RIGHT JOIN 反过来，保留右表所有行。MySQL 不支持 FULL OUTER JOIN，真需要两边都保留时，用 LEFT JOIN 和 RIGHT JOIN 各查一次再 UNION 起来。"
+    },
+    {
+      "heading": "ON 和 WHERE 的位置是生死线",
+      "text": "右表上的过滤条件，写在 ON 里表示「只匹配满足条件的右表行，左表行仍保留」；写在 WHERE 里会先把补 NULL 的行过滤掉，LEFT JOIN 就悄悄退化成 INNER JOIN。这是线上数据偏差最常见的来源，写完一定要检查。"
+    },
+    {
+      "heading": "典型用法：找「没有」",
+      "text": "LEFT JOIN 加 WHERE 右表主键 IS NULL，就是反连接，能找出「没有关联记录」的数据：没下过单的用户、没有商品的分类、支付成功但没发货的订单。它比 NOT IN 安全，不怕 NULL 捣乱。"
+    },
+    {
+      "heading": "计数别用错",
+      "text": "统计每个用户有多少订单时，COUNT(*) 会把没订单的用户也算 1（那行右表全是 NULL）；要用 COUNT(o.id)，它跳过 NULL。同理 SUM 也要注意补 NULL 的行对结果的影响。"
+    },
+    {
+      "heading": "多表链式 LEFT JOIN",
+      "text": "a LEFT JOIN b ON ... LEFT JOIN c ON ... 时，b 为空会导致 c 也匹配不上，这是正常的。但如果中间插了一个 INNER JOIN，整条链的语义会被拉回交集。混用时按「从左到右」推演每一行的命中情况，别凭直觉。"
+    }
+  ],
+  "keyPoints": [
+    "LEFT JOIN 保留左表所有行，右表没匹配到就补 NULL。",
+    "右表的过滤条件必须写在 ON 里，写到 WHERE 就退化成 INNER JOIN。",
+    "找「没有关联记录」用 LEFT JOIN 加 WHERE 右表.id IS NULL。",
+    "统计右表记录数量用 COUNT(右表.id)，不是 COUNT(*)。",
+    "MySQL 不支持 FULL OUTER JOIN，用 LEFT UNION RIGHT 模拟。",
+    "链式 join 里混用 INNER JOIN 会改变整体语义。"
+  ],
+  "snippets": [
+    {
+      "title": "保留所有用户，带上他们的已支付订单",
+      "lang": "sql",
+      "code": "SELECT u.id, u.name, o.id AS order_id, o.total_amount\nFROM users u\nLEFT JOIN orders o\n  ON o.user_id = u.id\n AND o.status = 'paid'\nWHERE u.created_at >= '2026-01-01';"
+    },
+    {
+      "title": "找出从没下过单的用户",
+      "lang": "sql",
+      "code": "SELECT u.id, u.name\nFROM users u\nLEFT JOIN orders o ON o.user_id = u.id\nWHERE o.id IS NULL;"
+    },
+    {
+      "title": "每个用户的有效订单数（注意 COUNT 的写法）",
+      "lang": "sql",
+      "code": "SELECT u.id, u.name, COUNT(o.id) AS paid_order_cnt\nFROM users u\nLEFT JOIN orders o\n  ON o.user_id = u.id\n AND o.status = 'paid'\nGROUP BY u.id, u.name;"
+    }
+  ],
+  "pitfalls": [
+    "把右表条件写进 WHERE：LEFT JOIN 立刻变成 INNER JOIN，未下单用户全部消失。",
+    "用 COUNT(*) 统计每个用户订单数：没订单的用户会显示 1。",
+    "ON 条件只写了一半，产生重复行，金额被放大。",
+    "RIGHT JOIN 混在多层 join 里可读性极差，统一改写成 LEFT JOIN 调换表序。"
+  ],
+  "enterprise": "用户、订单报表几乎离不开 LEFT JOIN，条件写错是最常见的线上数据偏差来源；用反连接做数据巡检（订单没有对应用户、商品没有分类）；分页场景先分页主表再 join 明细，避免大表先 join 再 LIMIT 扫太多行。",
+  "related": [
+    "join-inner",
+    "null-handling",
+    "group-by",
+    "ecommerce-schema"
+  ]
+}

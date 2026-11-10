@@ -1,0 +1,54 @@
+{
+  "id": "create-table",
+  "titleZh": "CREATE TABLE：建表",
+  "title": "CREATE TABLE",
+  "chapter": "table-design",
+  "difficulty": 1,
+  "minutes": 15,
+  "summary": "建表就像盖房子先立柱子：CREATE TABLE 一次性定好有哪些列、每列存什么类型、哪些列必填，之后所有数据都住进这个「格子」里。比如订单表要先写清 user_id、total_amount、status，列定错了后面改起来既麻烦又容易动到线上数据。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "表就是一张有固定列名的电子表格：列名决定你以后能查什么，类型决定每格能放什么。CREATE TABLE 干的事就是把这张表的结构写到数据库的「字典」里，后续 INSERT 只能往这些列里填数据，多一个列都塞不进去。"
+    },
+    {
+      "heading": "最短能跑的一张表",
+      "text": "先写表名，再写括号里的列定义，每列是「列名 + 类型 + 可选约束」，用逗号分开，最后以分号结束。CREATE TABLE IF NOT EXISTS 可以避免重复建表报错，正式环境建表最好把 COMMENT 一起写上，方便别人看懂每列是干什么的。"
+    },
+    {
+      "heading": "约束写在列后面",
+      "text": "NOT NULL 表示这列必须有值，DEFAULT 给个默认值，PRIMARY KEY 标出唯一标识一行的那列，UNIQUE 保证不重复，COMMENT 是给人看的说明。约束是在数据库这一层兜底，比只在代码里校验更可靠，因为绕过应用直接写库的脚本也会被拦住。"
+    },
+    {
+      "heading": "改表比建表难得多",
+      "text": "表建好后可以用 ALTER TABLE 加列、改类型、加索引，但大表改结构可能锁表或重建表，线上要格外小心。所以建表时多想一步：这张表会长到多少行、哪些列以后可能变长、要不要软删除标记，能省掉后面很多麻烦。"
+    }
+  ],
+  "keyPoints": [
+    "建表 = 定义列名、类型、约束，之后所有写入都受它限制。",
+    "每列尽量 NOT NULL 并给 DEFAULT，能少掉很多 NULL 判断。",
+    "建表语句里用 COMMENT 说明业务含义，比代码里的注释更耐久。",
+    "大表改结构要谨慎，建表时就把字段和长度想清楚。",
+    "CREATE TABLE IF NOT EXISTS 可避免重复执行报错。"
+  ],
+  "snippets": [
+    {
+      "title": "建一张电商订单表",
+      "lang": "sql",
+      "code": "CREATE TABLE IF NOT EXISTS orders (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '订单 id',\n  user_id BIGINT UNSIGNED NOT NULL COMMENT '下单用户',\n  status VARCHAR(16) NOT NULL DEFAULT 'created' COMMENT '订单状态',\n  total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00 COMMENT '订单总额',\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '下单时间',\n  PRIMARY KEY (id),\n  KEY idx_user_created (user_id, created_at)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单主表';"
+    },
+    {
+      "title": "看一张表到底建成什么样",
+      "lang": "sql",
+      "code": "SHOW CREATE TABLE orders;\nDESC orders;"
+    }
+  ],
+  "pitfalls": [
+    "漏写 ENGINE=InnoDB：MySQL 8.0 默认就是 InnoDB，但老库迁移时最好显式写上，别把 MyISAM 带过来。",
+    "列名用了 MySQL 关键字（order、status 之外还有 desc、key），不加反引号会直接报语法错误。",
+    "建表不写字符集：库默认 utf8mb4 才安全，否则 emoji 和部分生僻字存不进去。",
+    "以为 ALTER TABLE 很快：几千万行的表加列可能重建整张表，线上要评估锁表时间。"
+  ],
+  "enterprise": "企业里建表语句要进代码仓库，通过 Flyway 或 Liquibase 这类工具管理版本，禁止手工在生产库改结构。建表模板一般会固定：InnoDB、utf8mb4、每列 NOT NULL + DEFAULT + COMMENT、必须有主键，评审时按这张清单逐项过。",
+  "related": ["data-types", "primary-key", "decimal-money", "time-types", "naming-conventions"]
+}

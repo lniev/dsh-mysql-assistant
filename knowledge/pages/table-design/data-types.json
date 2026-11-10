@@ -1,0 +1,54 @@
+{
+  "id": "data-types",
+  "titleZh": "数据类型总览",
+  "title": "Data types",
+  "chapter": "table-design",
+  "difficulty": 2,
+  "minutes": 15,
+  "summary": "选数据类型就像给东西挑收纳盒：盒子太大浪费空间，太小又装不下。MySQL 的类型决定了每行占多少字节、能不能索引、会不会精度丢失。比如年龄用 TINYINT UNSIGNED 就够，金额却必须用 DECIMAL，选错类型后面改起来非常痛苦。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "类型是给列定的「存储规格」：数值、字符串、时间、二进制各管一类。它不是越大约好，因为每行占的空间决定了磁盘大小、内存缓存能装多少行，也直接影响查询速度。同一条数据用合适的类型存，往往比堆配置更能提速。"
+    },
+    {
+      "heading": "四大类，先认常用的",
+      "text": "整数有 TINYINT、SMALLINT、INT、BIGINT，按取值范围挑；小数有 DECIMAL（精确）和 FLOAT/DOUBLE（近似）；字符串最常用 VARCHAR（变长）、CHAR（定长）和 TEXT（长文本）；时间有 DATETIME、TIMESTAMP、DATE。先把这几个用熟，其余遇到再查。"
+    },
+    {
+      "heading": "能定长就别用变长？不一定",
+      "text": "CHAR 适合长度固定的编码，比如 country_code CHAR(2)、md5 CHAR(32)，省掉长度字节；VARCHAR 适合名字、标题这种长度差异大的内容。VARCHAR 只存实际内容加 1~2 字节长度，读的时候按需取，所以日常绝大多数字符串列都用 VARCHAR。"
+    },
+    {
+      "heading": "整数选多大",
+      "text": "TINYINT 占 1 字节，取值范围 -128~127；INT 占 4 字节；BIGINT 占 8 字节。给 status 这种只有几十种取值的列用 TINYINT，给用户 id、订单 id 用 BIGINT，因为业务量一大 INT 就可能不够。UNSIGNED 可以把正数范围翻倍，但减法时要小心负数溢出。"
+    }
+  ],
+  "keyPoints": [
+    "类型决定存储空间和取值范围，选「刚好够用」比选最大更好。",
+    "金额用 DECIMAL，不要用 FLOAT/DOUBLE，避免精度误差。",
+    "字符串默认用 VARCHAR，定长编码再用 CHAR。",
+    "自增主键和业务 id 用 BIGINT UNSIGNED，别用 INT 赌业务量。",
+    "TINYINT 适合状态、枚举这类小范围整数。"
+  ],
+  "snippets": [
+    {
+      "title": "按业务选类型的商品表",
+      "lang": "sql",
+      "code": "CREATE TABLE products (\n  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n  category_id BIGINT UNSIGNED NOT NULL,\n  name VARCHAR(120) NOT NULL,\n  price DECIMAL(10,2) NOT NULL DEFAULT 0.00,\n  stock INT NOT NULL DEFAULT 0,\n  on_sale TINYINT(1) NOT NULL DEFAULT 1,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+    },
+    {
+      "title": "看看每列实际用了什么类型",
+      "lang": "sql",
+      "code": "SELECT column_name, column_type, is_nullable, column_comment\nFROM information_schema.columns\nWHERE table_schema = 'shop' AND table_name = 'products';"
+    }
+  ],
+  "pitfalls": [
+    "把 INT(11) 的 11 当成长度：它只是显示宽度，已废弃，INT 永远占 4 字节，范围不会变大。",
+    "用 FLOAT/DOUBLE 存金额：0.1 + 0.2 可能算出 0.30000000000000004，对账直接对不上。",
+    "VARCHAR(255) 不是 255 字节而是最多 255 个字符，utf8mb4 下按 4 字节算可能撑满索引长度限制。",
+    "用 TEXT 存本该 VARCHAR 的短字段：TEXT 不能有默认值，很多排序、索引操作也更受限。"
+  ],
+  "enterprise": "团队一般有一份「类型约定表」：id 用 BIGINT UNSIGNED，金额用 DECIMAL(12,2)，状态用 TINYINT 加注释枚举，时间用 DATETIME 存业务时间。评审建表时对照这份约定，能避免同一张表里日期一会儿字符串一会儿 DATETIME 的混乱。",
+  "related": ["decimal-money", "time-types", "create-table", "json-type", "charset-collation"]
+}

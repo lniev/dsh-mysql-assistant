@@ -1,0 +1,59 @@
+{
+  "id": "index-design",
+  "titleZh": "索引设计实战清单",
+  "title": "Index design checklist",
+  "chapter": "index",
+  "difficulty": 3,
+  "minutes": 12,
+  "summary": "设计索引就像给图书馆做检索系统：先看读者平时怎么问（查询模式），再决定做几本目录（索引），而不是每本书都配一本。做对了查询快十倍，做多了写入慢、空间涨。这份清单把「先看查询、再定顺序、控制数量、上线验证」串成一套可执行的流程。",
+  "sections": [
+    {
+      "heading": "一句话理解",
+      "text": "索引设计不是「觉得哪列常用就建一个」，而是从真实 SQL 出发倒推：这条 SQL 过滤哪些列、排序列是什么、要返回哪些列。一个设计良好的联合索引，往往能同时满足好几条相似查询，比堆一堆单列索引更省资源。"
+    },
+    {
+      "heading": "先定顺序：等值 → 排序 → 范围",
+      "text": "联合索引里，把等值过滤的列放最左，把 ORDER BY 的列放在范围列之前，范围列放最后。比如常查「某用户某状态按时间倒序」，就建 (user_id, status, created_at)。顺序一旦定错，范围列后面的列就再也用不上，等于白建。"
+    },
+    {
+      "heading": "控制数量、消除冗余",
+      "text": "单表索引一般控制在 5 个以内，每个索引都要能对应到具体查询。如果已有 (a, b)，那 (a) 就是冗余的，可以直接删；重复索引会让写入维护多份结构，还浪费 Buffer Pool。定期用 performance_schema 和慢查询确认「哪些索引从来没被用过」。"
+    },
+    {
+      "heading": "覆盖高频查询，注意长列",
+      "text": "列表页、报表这类高频查询，可以把展示用的小字段加进索引尾部实现覆盖，避免回表。但别把大字段塞进索引：长字符串用前缀索引，比如 name(10)，既省空间又能命中前缀查询。上线前后都要用 EXPLAIN 验证，而不是建完就当完事。"
+    }
+  ],
+  "keyPoints": [
+    "从真实 SQL 倒推索引，一个索引服务一类查询。",
+    "联合索引顺序：等值列 → 排序列 → 范围列。",
+    "单表索引控制在 5 个以内，删除被更长索引包含的冗余索引。",
+    "覆盖高频查询列可避免回表，但别把大字段塞进索引。",
+    "长字符串用前缀索引，建完必须用 EXPLAIN 验证。"
+  ],
+  "snippets": [
+    {
+      "title": "为一个列表查询设计联合索引",
+      "lang": "sql",
+      "code": "ALTER TABLE orders ADD INDEX idx_user_status_created (user_id, status, created_at);\n\nEXPLAIN SELECT id, total_amount, created_at\nFROM orders\nWHERE user_id = 1001\n  AND status = 'paid'\nORDER BY created_at DESC\nLIMIT 20;"
+    },
+    {
+      "title": "长字符串用前缀索引",
+      "lang": "sql",
+      "code": "ALTER TABLE products ADD INDEX idx_name_prefix (name(10));\n\nEXPLAIN SELECT id, name FROM products WHERE name LIKE '纯棉%';\n\n-- Sub_part 列显示前缀长度 10，确认前缀索引生效\nSHOW INDEX FROM products;"
+    },
+    {
+      "title": "找出从没被用过的索引",
+      "lang": "sql",
+      "code": "SELECT object_name AS table_name, index_name\nFROM performance_schema.table_io_waits_summary_by_index_usage\nWHERE index_name IS NOT NULL\n  AND count_star = 0\nORDER BY object_name;"
+    }
+  ],
+  "pitfalls": [
+    "给每个 WHERE 列单独建索引：查询真的用得上的是其中一两个，其余全是写入负担。",
+    "索引列顺序随手写：范围列放前面，后面的等值列全部失效，查询照样慢。",
+    "只建索引不验证：没有 EXPLAIN 确认 key 命中，可能白建，也可能建错类型。",
+    "把 VARCHAR(255) 整列加进联合索引：索引又宽又慢，应该用前缀索引或缩短字段。"
+  ],
+  "enterprise": "企业里索引设计通常和 SQL 评审绑定：新功能上线前提交「查询清单 + EXPLAIN 结果」，DBA 按清单建索引并控制数量；上线后用慢查询和索引使用统计做季度清理。核心交易表还会区分读写比例，写多读少的表尽量只保留必要索引。",
+  "related": ["composite-index", "covering-index", "index-failure", "explain", "optimizer-stats", "deep-pagination"]
+}
