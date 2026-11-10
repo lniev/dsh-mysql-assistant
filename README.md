@@ -9,7 +9,7 @@
 > 知识地图 · 学习路线 · 企业级实战 · SQL 操练场 · AI 问答，五块内容互相打通的 MySQL 学习工作台。
 > 83 个通俗知识点、24 道自动判题练习、8 个企业实战，内置电商示例库；默认离线可用，需要时还能切到真实 MySQL 8。
 
-![知识地图](docs/screenshots/01-map.png)
+![MySQL 学习助手](docs/cover.png)
 
 ---
 
@@ -82,6 +82,26 @@ plugin_manager install_bundle target=<该目录的绝对路径>
 安装后刷新 Harness Web 页面，左侧栏会出现 **MySQL 学习助手** 入口。
 
 > `client.js` 已随仓库提供；改过 `src/` 后执行 `node build.mjs` 重新生成即可。
+
+### 让 AI 自动安装（推荐）
+
+不想敲命令的话，把下面这段话直接发给 Harness 里的 Agent 即可：
+
+> 帮我安装这个 DSH 插件：https://github.com/lniev/dsh-mysql-assistant
+> 克隆到 `~/ds-plugins/dsh-mysql-assistant`，执行 `npm install`，然后用 `plugin_manager install_bundle` 安装该目录，确认插件已启用后告诉我刷新页面。
+
+Agent 会自动完成：
+
+1. `git clone` 仓库到插件目录（默认 `~/ds-plugins/dsh-mysql-assistant`）；
+2. `npm install` 安装 `sql.js`、`mysql2` 等 Host 依赖；
+3. 调用 `plugin_manager install_bundle`，把目录作为 bundle 安装到当前 profile；
+4. 检查插件状态，提示你刷新 Harness Web 页面。
+
+以后更新也可以直接说：
+
+> 把 MySQL 学习助手更新到最新版本：拉取最新代码、重新 `npm install`、再重新安装一次 bundle。
+
+> 前提：Agent 具备 shell 与插件管理权限，且机器可以访问 GitHub。安装完成后无需重启 Harness，刷新页面即可。
 
 ### 第一次打开建议这样用
 
@@ -271,6 +291,8 @@ npm run test:ui                # jsdom 渲染与交互
 - jsdom 下五个页签的渲染、点击、判题、执行环境弹层与跨页跳转。
 
 文档截图由维护者在本地生成：先运行 `node scripts/preview-map.mjs --tab "SQL 操练场"` 得到预览 HTML（`/tmp/mysql-map-preview.html`），再用无头 Chrome 截取对应区域，产物保存在 `docs/screenshots/`。
+
+仓库封面 / 社交预览图是 `docs/cover.png`（1280×640，小于 1MB）。GitHub 不支持用 API 设置社交预览，需要到仓库 **Settings → Social preview** 手动上传这张图。
 
 ## 如何扩充内容
 
