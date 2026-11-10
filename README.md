@@ -1,5 +1,7 @@
 # MySQL 学习助手（@local/mysql-assistant）
 
+> GitHub 仓库：https://github.com/lniev/dsh-mysql-assistant
+
 把 MySQL 从「会用」到「用好」做成一个可交互的学习面板：知识地图、学习路线、企业级实战和 SQL 操练场全部内置，离线可用，讲人话、给例子、能动手。
 
 在 Harness Web UI 左侧栏点 **MySQL 学习助手** 打开。
